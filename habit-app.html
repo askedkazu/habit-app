@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ちょいステップ習慣</title>
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+/* ==========================================================
+   ちょいステップ習慣 - 追加スタイル
+   Tailwind で表現しにくい共通部品・アニメーションを定義
+   ========================================================== */
+
+body {
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* カード */
+.card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* ボタン */
+.btn-primary {
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1rem;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+.btn-primary:hover:not(:disabled) { background: #4338ca; }
+.btn-primary:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  transition: background 0.15s;
+}
+.btn-ghost:hover { background: #e2e8f0; }
+
+/* ショートステップの項目 */
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.step-item:has(input:checked) {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+.step-item input {
+  width: 1.35rem;
+  height: 1.35rem;
+  accent-color: #10b981;
+  flex-shrink: 0;
+}
+
+/* 進捗ステッパー */
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.step span {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: #e2e8f0;
+  color: #64748b;
+}
+.step.active { color: #4f46e5; font-weight: 700; }
+.step.active span { background: #4f46e5; color: #fff; }
+.step.done span { background: #10b981; color: #fff; }
+.step-line {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  margin: 0 0.25rem 1.1rem;
+}
+
+/* クイズの選択肢 */
+.choice-btn {
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s;
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+.choice-btn:hover:not(:disabled) { border-color: #a5b4fc; background: #eef2ff; }
+.choice-btn .label {
+  font-weight: 700;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+.choice-btn.correct { border-color: #10b981; background: #ecfdf5; }
+.choice-btn.wrong   { border-color: #f43f5e; background: #fff1f2; }
+.choice-btn:disabled { cursor: default; }
+
+/* 画面切替のフェードイン */
+.screen { animation: fadeIn 0.25s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ローディングスピナー */
+.spinner {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 3px solid #c7d2fe;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 完了時のアイコン */
+.celebrate { animation: pop 0.6s ease-out; }
+@keyframes pop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  60%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* 紙吹雪 */
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation: fall linear forwards;
+}
+@keyframes fall {
+  to { transform: translateY(105vh) rotate(720deg); }
+}
+
+/* Tailwind CDN が読み込めない環境でも画面切替が壊れないようにするフォールバック */
+.hidden { display: none !important; }
+
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="max-w-md mx-auto px-4 pb-16">
+
+    <!-- ===== ヘッダー ===== -->
+    <header class="flex items-center justify-between py-4">
+      <div>
+        <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
+        <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
+      </div>
+      <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- ===== 設定パネル（APIキー） ===== -->
+    <section id="settingsPanel" class="hidden card mb-4">
+      <h2 class="font-bold mb-2">設定</h2>
+      <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
+      <div class="flex gap-2">
+        <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off"
+               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
+      </div>
+      <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
+      <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
+      <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false"
+             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      <datalist id="modelOptions">
+        <option value="gemini-3.8-flash">推奨</option>
+      </datalist>
+      <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
+      <div class="flex gap-2 mt-3">
+        <button id="saveApiKey" class="btn-primary flex-1">保存</button>
+        <button id="clearApiKey" class="btn-ghost">削除</button>
+      </div>
+      <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
+      <p class="text-xs text-slate-400 mt-2">
+        ※キーはこの端末のブラウザ（localStorage）にのみ保存されます。
+        キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
+      </p>
+    </section>
+
+    <!-- ===== 達成状況 ===== -->
+    <section class="card mb-4 flex items-center justify-around text-center">
+      <div>
+        <p class="text-2xl font-bold text-indigo-600" id="streakCount">0</p>
+        <p class="text-xs text-slate-500">連続日数</p>
+      </div>
+      <div class="w-px h-10 bg-slate-200"></div>
+      <div>
+        <p class="text-2xl font-bold text-emerald-600" id="totalCount">0</p>
+        <p class="text-xs text-slate-500">累計達成</p>
+      </div>
+      <div class="w-px h-10 bg-slate-200"></div>
+      <div>
+        <p class="text-2xl" id="todayBadge">—</p>
+        <p class="text-xs text-slate-500">今日</p>
+      </div>
+    </section>
+
+    <!-- ===== 進捗インジケータ ===== -->
+    <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
+      <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+      <li class="step-line"></li>
+      <li class="step" data-step="2"><span>2</span>証拠写真</li>
+      <li class="step-line"></li>
+      <li class="step" data-step="3"><span>3</span>確認テスト</li>
+    </ol>
+
+    <!-- ===== STEP 1: ショートステップ ===== -->
+    <section id="step1" class="card screen">
+      <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
+      <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
+
+      <ul id="shortStepList" class="space-y-2"></ul>
+
+      <!-- 自分だけのステップ追加 -->
+      <form id="addStepForm" class="flex gap-2 mt-3">
+        <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）"
+               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button class="btn-ghost text-sm" type="submit">追加</button>
+      </form>
+
+      <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+        達成！ 次へ進む
+      </button>
+    </section>
+
+    <!-- ===== STEP 2: 証拠写真アップロード ===== -->
+    <section id="step2" class="card screen hidden">
+      <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
+      <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
+
+      <!-- capture="environment" でスマホは背面カメラが起動 -->
+      <label for="photoInput" id="photoDropzone"
+             class="flex flex-col items-center justify-center border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-xl h-56 cursor-pointer overflow-hidden relative">
+        <div id="photoPlaceholder" class="text-center text-indigo-500">
+          <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+          <p class="font-medium">タップしてカメラ起動 / 写真を選択</p>
+        </div>
+        <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
+      </label>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+
+      <button id="changePhotoBtn" class="hidden text-sm text-indigo-600 underline mt-2">写真を撮り直す</button>
+
+      <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+        写真を送信して問題生成
+      </button>
+      <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
+        APIキーなしでデモ問題を試す
+      </button>
+
+      <!-- ローディング表示 -->
+      <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-indigo-600">
+        <div class="spinner"></div>
+        <span class="text-sm">AIが問題を作成中…</span>
+      </div>
+      <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+
+      <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+    </section>
+
+    <!-- ===== STEP 3: 確認テスト ===== -->
+    <section id="step3" class="card screen hidden">
+      <div class="flex items-center justify-between mb-2">
+        <span id="quizProgress" class="text-sm font-medium text-indigo-600">Q1 / 3</span>
+        <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
+      </div>
+      <div class="h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
+        <div id="quizBar" class="h-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
+      </div>
+
+      <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
+      <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
+      <div id="quizChoices" class="space-y-2"></div>
+
+      <!-- 採点結果（正解/不正解＋解説） -->
+      <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+
+      <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
+    </section>
+
+    <!-- ===== 完了画面 ===== -->
+    <section id="stepDone" class="card screen hidden text-center">
+      <div class="text-6xl mb-3 celebrate">🎉</div>
+      <h2 class="text-2xl font-bold text-indigo-600 mb-2">テストクリア！習慣達成！</h2>
+      <p id="doneScore" class="text-slate-600 mb-1"></p>
+      <p id="doneMessage" class="text-sm text-slate-500 mb-6"></p>
+      <button id="restartBtn" class="btn-primary w-full py-3">もう一度チャレンジ</button>
+    </section>
+  </div>
+
+  <!-- 紙吹雪用レイヤー -->
+  <div id="confetti" class="pointer-events-none fixed inset-0 overflow-hidden"></div>
+
+  <script>
+/* ==========================================================
+   ちょいステップ習慣 - アプリ本体
+   ----------------------------------------------------------
+   画面の流れ:
+     STEP1 ショートステップ（チェック → 達成ボタン）
+       ↓
+     STEP2 証拠写真アップロード → Gemini API で3問生成
+       ↓
+     STEP3 確認テスト（1問ずつ回答・採点）
+       ↓
+     完了画面（テストクリア！習慣達成！）
+   ========================================================== */
+
+(() => {
+  "use strict";
+
+  /* ----------------------------------------------------------
+   * 定数・設定
+   * -------------------------------------------------------- */
+  const STORAGE_KEYS = {
+    apiKey: "habitApp.geminiApiKey",
+    model: "habitApp.geminiModel",
+    customSteps: "habitApp.customSteps",
+    history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
+  };
+
+  // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
+  const DEFAULT_MODEL = "gemini-3.8-flash";
+  // 新規ユーザーには提供終了になった旧モデル。保存されていたら既定モデルに置き換える
+  const RETIRED_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
+
+  const GEMINI_ENDPOINT = (model) =>
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  // 送信前に画像を縮小する際の最大辺（px）。通信量とAPIの負荷を抑えるため
+  const MAX_IMAGE_SIZE = 1280;
+
+  // デフォルトの超低ハードルなステップ
+  const DEFAULT_STEPS = [
+    "机に座った",
+    "教科書・ノートを出した",
+    "本を1ページ開いた",
+    "スマホを手の届かない場所に置いた",
+    "1行だけ読んだ／書いた",
+  ];
+
+  // APIキー無しで動作確認できるデモ用の問題
+  const DEMO_QUIZ = {
+    topic: "デモ：日本の歴史",
+    questions: [
+      {
+        question: "江戸幕府を開いた人物は誰？",
+        choices: ["織田信長", "豊臣秀吉", "徳川家康", "足利尊氏"],
+        answerIndex: 2,
+        explanation: "1603年、徳川家康が征夷大将軍に任命され江戸幕府を開きました。",
+      },
+      {
+        question: "鎌倉幕府が成立した場所はどこ？",
+        choices: ["京都", "鎌倉", "奈良", "大阪"],
+        answerIndex: 1,
+        explanation: "源頼朝が相模国の鎌倉に幕府を開きました。",
+      },
+      {
+        question: "明治維新の後、1889年に発布された憲法は？",
+        choices: ["日本国憲法", "十七条の憲法", "大日本帝国憲法", "御成敗式目"],
+        answerIndex: 2,
+        explanation: "1889年（明治22年）に大日本帝国憲法が発布されました。",
+      },
+    ],
+  };
+
+  /* ----------------------------------------------------------
+   * DOM 参照ヘルパー
+   * -------------------------------------------------------- */
+  const $ = (id) => document.getElementById(id);
+
+  const el = {
+    // 設定
+    settingsToggle: $("settingsToggle"),
+    settingsPanel: $("settingsPanel"),
+    apiKeyInput: $("apiKeyInput"),
+    toggleKeyVisibility: $("toggleKeyVisibility"),
+    modelSelect: $("modelSelect"),
+    saveApiKey: $("saveApiKey"),
+    clearApiKey: $("clearApiKey"),
+    apiKeyStatus: $("apiKeyStatus"),
+    // 達成状況
+    streakCount: $("streakCount"),
+    totalCount: $("totalCount"),
+    todayBadge: $("todayBadge"),
+    stepper: $("stepper"),
+    // STEP1
+    shortStepList: $("shortStepList"),
+    addStepForm: $("addStepForm"),
+    newStepInput: $("newStepInput"),
+    achieveBtn: $("achieveBtn"),
+    // STEP2
+    photoInput: $("photoInput"),
+    photoPreview: $("photoPreview"),
+    photoPlaceholder: $("photoPlaceholder"),
+    changePhotoBtn: $("changePhotoBtn"),
+    generateBtn: $("generateBtn"),
+    demoBtn: $("demoBtn"),
+    loading: $("loading"),
+    errorMsg: $("errorMsg"),
+    // STEP3
+    quizProgress: $("quizProgress"),
+    quizScore: $("quizScore"),
+    quizBar: $("quizBar"),
+    quizTopic: $("quizTopic"),
+    quizQuestion: $("quizQuestion"),
+    quizChoices: $("quizChoices"),
+    quizFeedback: $("quizFeedback"),
+    nextQuestionBtn: $("nextQuestionBtn"),
+    // 完了
+    doneScore: $("doneScore"),
+    doneMessage: $("doneMessage"),
+    restartBtn: $("restartBtn"),
+    confetti: $("confetti"),
+  };
+
+  const screens = {
+    1: $("step1"),
+    2: $("step2"),
+    3: $("step3"),
+    done: $("stepDone"),
+  };
+
+  /* ----------------------------------------------------------
+   * アプリの状態
+   * -------------------------------------------------------- */
+  const state = {
+    selectedFile: null, // 選択された画像ファイル
+    quiz: null,         // { topic, questions: [...] }
+    currentIndex: 0,    // 現在の問題番号
+    correctCount: 0,    // 正解数
+  };
+
+  /* ----------------------------------------------------------
+   * localStorage ラッパー（プライベートモード等で失敗しても落ちないように）
+   * -------------------------------------------------------- */
+  const storage = {
+    get(key, fallback = null) {
+      try {
+        const v = localStorage.getItem(key);
+        return v === null ? fallback : v;
+      } catch {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    remove(key) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* noop */
+      }
+    },
+    getJSON(key, fallback) {
+      try {
+        return JSON.parse(this.get(key)) ?? fallback;
+      } catch {
+        return fallback;
+      }
+    },
+    setJSON(key, value) {
+      return this.set(key, JSON.stringify(value));
+    },
+  };
+
+  /* ==========================================================
+   * 画面遷移
+   * ========================================================== */
+  function showScreen(name) {
+    Object.entries(screens).forEach(([key, node]) => {
+      node.classList.toggle("hidden", key !== String(name));
+    });
+
+    // ステッパーの表示更新
+    const current = name === "done" ? 4 : Number(name);
+    el.stepper.querySelectorAll(".step").forEach((s) => {
+      const n = Number(s.dataset.step);
+      s.classList.toggle("active", n === current);
+      s.classList.toggle("done", n < current);
+    });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ==========================================================
+   * 設定（APIキー）
+   * ========================================================== */
+  function initSettings() {
+    const savedKey = storage.get(STORAGE_KEYS.apiKey, "");
+    el.apiKeyInput.value = savedKey;
+    el.modelSelect.value = getModel();
+    updateApiKeyStatus();
+
+    // APIキー未設定なら最初から設定パネルを開いておく
+    if (!savedKey) el.settingsPanel.classList.remove("hidden");
+
+    el.settingsToggle.addEventListener("click", () => {
+      el.settingsPanel.classList.toggle("hidden");
+    });
+
+    el.toggleKeyVisibility.addEventListener("click", () => {
+      const isPw = el.apiKeyInput.type === "password";
+      el.apiKeyInput.type = isPw ? "text" : "password";
+      el.toggleKeyVisibility.textContent = isPw ? "隠す" : "表示";
+    });
+
+    el.saveApiKey.addEventListener("click", () => {
+      const key = el.apiKeyInput.value.trim();
+      if (!key) {
+        el.apiKeyStatus.textContent = "APIキーを入力してください。";
+        return;
+      }
+      storage.set(STORAGE_KEYS.apiKey, key);
+      saveModel();
+      updateApiKeyStatus("保存しました ✅");
+      setTimeout(() => el.settingsPanel.classList.add("hidden"), 600);
+    });
+
+    el.clearApiKey.addEventListener("click", () => {
+      storage.remove(STORAGE_KEYS.apiKey);
+      el.apiKeyInput.value = "";
+      updateApiKeyStatus("削除しました");
+    });
+
+    el.modelSelect.addEventListener("change", saveModel);
+  }
+
+  // 保存済みのモデル名を返す（未設定・提供終了モデルなら既定モデル）
+  function getModel() {
+    const saved = storage.get(STORAGE_KEYS.model, "").trim();
+    return saved && !RETIRED_MODELS.includes(saved) ? saved : DEFAULT_MODEL;
+  }
+
+  // 入力欄のモデル名を保存（"models/xxx" 形式で貼り付けられても動くように整形）
+  function saveModel() {
+    const model = el.modelSelect.value.trim().replace(/^models\//, "") || DEFAULT_MODEL;
+    el.modelSelect.value = model;
+    storage.set(STORAGE_KEYS.model, model);
+  }
+
+  function updateApiKeyStatus(msg) {
+    const key = storage.get(STORAGE_KEYS.apiKey, "");
+    const base = key ? `保存済みキー: ${key.slice(0, 4)}••••${key.slice(-4)}` : "APIキーは未設定です。";
+    el.apiKeyStatus.textContent = msg ? `${msg}（${base}）` : base;
+  }
+
+  /* ==========================================================
+   * 達成履歴（連続日数・累計）
+   * ========================================================== */
+  // ローカル時刻ベースで YYYY-MM-DD を返す
+  function dateKey(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function getHistory() {
+    return storage.getJSON(STORAGE_KEYS.history, []);
+  }
+
+  // 今日を達成済みとして記録（同日の重複は記録しない）
+  function recordAchievement() {
+    const history = getHistory();
+    const today = dateKey();
+    if (!history.includes(today)) {
+      history.push(today);
+      storage.setJSON(STORAGE_KEYS.history, history);
+    }
+  }
+
+  // 今日（未達成なら昨日）から遡って連続日数を数える
+  function calcStreak(history) {
+    const set = new Set(history);
+    const d = new Date();
+    if (!set.has(dateKey(d))) d.setDate(d.getDate() - 1);
+    let streak = 0;
+    while (set.has(dateKey(d))) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function renderStats() {
+    const history = getHistory();
+    el.streakCount.textContent = calcStreak(history);
+    el.totalCount.textContent = history.length;
+    el.todayBadge.textContent = history.includes(dateKey()) ? "✅" : "—";
+  }
+
+  /* ==========================================================
+   * STEP1: ショートステップ
+   * ========================================================== */
+  function getAllSteps() {
+    return [...DEFAULT_STEPS, ...storage.getJSON(STORAGE_KEYS.customSteps, [])];
+  }
+
+  function renderShortSteps() {
+    el.shortStepList.innerHTML = "";
+    getAllSteps().forEach((text, i) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+      label.className = "step-item";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = `step-${i}`;
+      cb.addEventListener("change", updateAchieveButton);
+
+      const span = document.createElement("span");
+      span.textContent = text; // ユーザー入力を含むので textContent で安全に表示
+
+      label.append(cb, span);
+      li.append(label);
+      el.shortStepList.append(li);
+    });
+    updateAchieveButton();
+  }
+
+  // 1つでもチェックがあれば達成ボタンを有効化
+  function updateAchieveButton() {
+    const checked = el.shortStepList.querySelectorAll("input:checked").length;
+    el.achieveBtn.disabled = checked === 0;
+    el.achieveBtn.textContent = checked
+      ? `達成！（${checked}個クリア）次へ進む`
+      : "達成！ 次へ進む";
+  }
+
+  function initShortSteps() {
+    renderShortSteps();
+
+    el.addStepForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = el.newStepInput.value.trim();
+      if (!text) return;
+      const custom = storage.getJSON(STORAGE_KEYS.customSteps, []);
+      custom.push(text);
+      storage.setJSON(STORAGE_KEYS.customSteps, custom);
+      el.newStepInput.value = "";
+      renderShortSteps();
+    });
+
+    el.achieveBtn.addEventListener("click", () => showScreen(2));
+  }
+
+  /* ==========================================================
+   * STEP2: 証拠写真のアップロード
+   * ========================================================== */
+  function initPhoto() {
+    el.photoInput.addEventListener("change", () => {
+      const file = el.photoInput.files && el.photoInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showError("画像ファイルを選択してください。");
+        return;
+      }
+      state.selectedFile = file;
+      hideError();
+
+      // プレビュー表示（Object URL を使うと大きな画像でも軽量）
+      if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
+      el.photoPreview.src = URL.createObjectURL(file);
+      el.photoPreview.classList.remove("hidden");
+      el.photoPlaceholder.classList.add("hidden");
+      el.changePhotoBtn.classList.remove("hidden");
+      el.generateBtn.disabled = false;
+    });
+
+    el.changePhotoBtn.addEventListener("click", () => {
+      el.photoInput.value = ""; // 同じファイルを選び直しても change が発火するように
+      el.photoInput.click();
+    });
+
+    el.generateBtn.addEventListener("click", onGenerateQuiz);
+
+    el.demoBtn.addEventListener("click", () => {
+      hideError();
+      startQuiz(structuredClone(DEMO_QUIZ));
+    });
+
+    document.querySelectorAll(".back-btn").forEach((btn) =>
+      btn.addEventListener("click", () => showScreen(btn.dataset.back))
+    );
+  }
+
+  // 「写真を送信して問題生成」ボタンの処理
+  async function onGenerateQuiz() {
+    const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
+    if (!apiKey) {
+      showError("Gemini APIキーが未設定です。右上の⚙️から設定してください。");
+      el.settingsPanel.classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (!state.selectedFile) {
+      showError("先に写真を選択してください。");
+      return;
+    }
+
+    setLoading(true);
+    hideError();
+    try {
+      const { base64, mimeType } = await fileToResizedBase64(state.selectedFile, MAX_IMAGE_SIZE);
+      const model = getModel();
+      const quiz = await generateQuizWithGemini({ apiKey, model, base64, mimeType });
+      startQuiz(quiz);
+    } catch (err) {
+      console.error(err);
+      showError(err.message || "問題の生成に失敗しました。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function setLoading(on) {
+    el.loading.classList.toggle("hidden", !on);
+    el.generateBtn.disabled = on || !state.selectedFile;
+    el.demoBtn.disabled = on;
+    el.generateBtn.textContent = on ? "生成中…" : "写真を送信して問題生成";
+  }
+
+  function showError(msg) {
+    el.errorMsg.textContent = msg;
+    el.errorMsg.classList.remove("hidden");
+  }
+  function hideError() {
+    el.errorMsg.classList.add("hidden");
+  }
+
+  /**
+   * 画像ファイルを縮小して Base64（data: プレフィックス無し）に変換する。
+   * スマホの写真は数MBあるため、長辺 maxSize px の JPEG に圧縮して送信する。
+   * デコードできない形式（一部ブラウザでのHEIC等）は元データをそのまま返す。
+   */
+  async function fileToResizedBase64(file, maxSize) {
+    try {
+      const bitmap = await loadImage(file);
+      const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+      const w = Math.round(bitmap.width * scale);
+      const h = Math.round(bitmap.height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      return { base64: dataUrl.split(",")[1], mimeType: "image/jpeg" };
+    } catch {
+      // フォールバック：縮小せずにそのまま送る
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
+        reader.readAsDataURL(file);
+      });
+      return { base64: String(dataUrl).split(",")[1], mimeType: file.type || "image/jpeg" };
+    }
+  }
+
+  // File → HTMLImageElement（EXIFの回転はモダンブラウザが自動で反映する）
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("decode failed"));
+      };
+      img.src = url;
+    });
+  }
+
+  /* ==========================================================
+   * Gemini API 呼び出し
+   * ----------------------------------------------------------
+   * REST: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+   * - 画像は inline_data（Base64）で送信
+   * - responseMimeType + responseSchema を指定し、
+   *   決まった形のJSONだけが返ってくるようにする（構造化出力）
+   * ========================================================== */
+
+  // AIに返してほしいJSONの形（OpenAPIスキーマのサブセット）
+  const QUIZ_RESPONSE_SCHEMA = {
+    type: "OBJECT",
+    properties: {
+      topic: {
+        type: "STRING",
+        description: "写真から読み取った学習内容のテーマ（短く）",
+      },
+      questions: {
+        type: "ARRAY",
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: "OBJECT",
+          properties: {
+            question: { type: "STRING", description: "問題文" },
+            choices: {
+              type: "ARRAY",
+              minItems: 4,
+              maxItems: 4,
+              items: { type: "STRING" },
+              description: "選択肢（4つ）",
+            },
+            answerIndex: {
+              type: "INTEGER",
+              description: "正解の選択肢のインデックス（0始まり）",
+            },
+            explanation: { type: "STRING", description: "正解の簡潔な解説" },
+          },
+          required: ["question", "choices", "answerIndex", "explanation"],
+          propertyOrdering: ["question", "choices", "answerIndex", "explanation"],
+        },
+      },
+    },
+    required: ["topic", "questions"],
+    propertyOrdering: ["topic", "questions"],
+  };
+
+  // AIへの指示文
+  const QUIZ_PROMPT = `あなたは学習をサポートする優しい家庭教師です。
+添付の写真は、ユーザーが今勉強している教科書・ノート・参考書などのページです。
+
+写真に写っている内容「だけ」に基づいて、理解を確認するための4択の確認テストを3問作成してください。
+
+ルール:
+- 問題・選択肢・解説はすべて日本語で書く（写真が英語教材などの場合、英単語・英文はそのまま使ってよい）
+- 写真に書かれていることから答えが導ける問題にする（写真にない知識は問わない）
+- 難易度は「さっと読めば解ける」程度のやさしめにする
+- 選択肢は必ず4つ。正解は1つだけ。紛らわしすぎる選択肢は避ける
+- answerIndex は正解の選択肢の位置（0〜3）
+- explanation は1〜2文で簡潔に
+- 写真が不鮮明、または学習内容が読み取れない場合は、写っている物から推測できる一般的な学習内容で問題を作り、topic に「（推測）」と付ける`;
+
+  /**
+   * 画像を Gemini に送って3問のクイズを生成する
+   * @returns {Promise<{topic:string, questions:Array}>}
+   */
+  async function generateQuizWithGemini({ apiKey, model, base64, mimeType }) {
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64 } },
+            { text: QUIZ_PROMPT },
+          ],
+        },
+      ],
+      // temperature は指定せずモデルの既定値を使う（Gemini 3 系は既定値での利用が推奨）
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: QUIZ_RESPONSE_SCHEMA,
+      },
+    };
+
+    // ネットワークが不安定な場合に備えてタイムアウトを設定
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+
+    let res;
+    try {
+      res = await fetch(GEMINI_ENDPOINT(model), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey, // APIキーはヘッダーで渡す（URLに残さない）
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (e.name === "AbortError") throw new Error("タイムアウトしました。もう一度お試しください。");
+      throw new Error("通信に失敗しました。ネットワーク接続を確認してください。");
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    // HTTPエラー時はAPIのエラーメッセージを分かりやすく表示
+    if (!res.ok) {
+      const apiMsg = data?.error?.message || res.statusText;
+      if (res.status === 400 && /API key/i.test(apiMsg)) {
+        throw new Error("APIキーが無効です。設定を確認してください。");
+      }
+      if (res.status === 429) {
+        throw new Error("API の利用上限に達しました。しばらく待ってから再度お試しください。");
+      }
+      if (res.status === 404) {
+        throw new Error(
+          `モデル「${model}」は使えません。\n右上の⚙️の「モデル」欄に、下の案内にあるモデル名を入力して保存してください。\n\n${apiMsg}`
+        );
+      }
+      throw new Error(`Gemini API エラー (${res.status})\n${apiMsg}`);
+    }
+
+    // 安全フィルタ等でブロックされた場合
+    if (data?.promptFeedback?.blockReason) {
+      throw new Error(`画像がブロックされました（${data.promptFeedback.blockReason}）。別の写真でお試しください。`);
+    }
+
+    // 応答テキストを取り出す（thinking パートは除外）
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const text = parts
+      .filter((p) => typeof p.text === "string" && !p.thought)
+      .map((p) => p.text)
+      .join("");
+    if (!text) {
+      const reason = data?.candidates?.[0]?.finishReason || "不明";
+      throw new Error(`AIから回答が得られませんでした（理由: ${reason}）。`);
+    }
+
+    return parseQuizJson(text);
+  }
+
+  /**
+   * AIの返したJSON文字列をパースし、形式を検証・正規化する
+   */
+  function parseQuizJson(text) {
+    let obj;
+    try {
+      // 念のため ```json ... ``` で囲まれていた場合も取り除く
+      const cleaned = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "");
+      obj = JSON.parse(cleaned);
+    } catch {
+      throw new Error("AIの応答をJSONとして読み取れませんでした。もう一度お試しください。");
+    }
+
+    const questions = Array.isArray(obj?.questions) ? obj.questions : [];
+    const valid = questions
+      .filter(
+        (q) =>
+          q &&
+          typeof q.question === "string" &&
+          Array.isArray(q.choices) &&
+          q.choices.length >= 2 &&
+          Number.isInteger(q.answerIndex) &&
+          q.answerIndex >= 0 &&
+          q.answerIndex < q.choices.length
+      )
+      .slice(0, 3)
+      .map((q) => ({
+        question: q.question,
+        choices: q.choices.map(String),
+        answerIndex: q.answerIndex,
+        explanation: typeof q.explanation === "string" ? q.explanation : "",
+      }));
+
+    if (valid.length === 0) {
+      throw new Error("有効な問題が生成されませんでした。別の写真でお試しください。");
+    }
+    return { topic: String(obj.topic || ""), questions: valid };
+  }
+
+  /* ==========================================================
+   * STEP3: 確認テスト
+   * ========================================================== */
+
+  // 正解位置の偏りを防ぐため、選択肢をシャッフル（正解インデックスも追従）
+  function shuffleChoices(q) {
+    const order = q.choices.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    return {
+      ...q,
+      choices: order.map((i) => q.choices[i]),
+      answerIndex: order.indexOf(q.answerIndex),
+    };
+  }
+
+  function startQuiz(quiz) {
+    state.quiz = { ...quiz, questions: quiz.questions.map(shuffleChoices) };
+    state.currentIndex = 0;
+    state.correctCount = 0;
+    showScreen(3);
+    renderQuestion();
+  }
+
+  function renderQuestion() {
+    const { questions, topic } = state.quiz;
+    const total = questions.length;
+    const q = questions[state.currentIndex];
+
+    el.quizProgress.textContent = `Q${state.currentIndex + 1} / ${total}`;
+    el.quizScore.textContent = `正解 ${state.correctCount}`;
+    el.quizBar.style.width = `${(state.currentIndex / total) * 100}%`;
+    el.quizTopic.textContent = topic ? `テーマ：${topic}` : "";
+    el.quizQuestion.textContent = q.question;
+    el.quizFeedback.classList.add("hidden");
+    el.nextQuestionBtn.classList.add("hidden");
+
+    el.quizChoices.innerHTML = "";
+    q.choices.forEach((choice, i) => {
+      const btn = document.createElement("button");
+      btn.className = "choice-btn";
+      btn.type = "button";
+
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = "ABCDEFGH"[i] || String(i + 1);
+
+      const txt = document.createElement("span");
+      txt.textContent = choice;
+
+      btn.append(label, txt);
+      btn.addEventListener("click", () => answer(i));
+      el.quizChoices.append(btn);
+    });
+  }
+
+  // 回答の採点
+  function answer(selected) {
+    const q = state.quiz.questions[state.currentIndex];
+    const isCorrect = selected === q.answerIndex;
+    if (isCorrect) state.correctCount++;
+
+    // 全選択肢を無効化し、正解・不正解を色で表示
+    [...el.quizChoices.children].forEach((btn, i) => {
+      btn.disabled = true;
+      if (i === q.answerIndex) btn.classList.add("correct");
+      else if (i === selected) btn.classList.add("wrong");
+    });
+
+    el.quizFeedback.className = `mt-4 rounded-lg p-3 text-sm ${
+      isCorrect ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
+    }`;
+    el.quizFeedback.innerHTML = "";
+    const head = document.createElement("p");
+    head.className = "font-bold mb-1";
+    head.textContent = isCorrect
+      ? "⭕ 正解！"
+      : `❌ 不正解… 正解は「${q.choices[q.answerIndex]}」`;
+    el.quizFeedback.append(head);
+    if (q.explanation) {
+      const exp = document.createElement("p");
+      exp.textContent = q.explanation;
+      el.quizFeedback.append(exp);
+    }
+
+    el.quizScore.textContent = `正解 ${state.correctCount}`;
+    const isLast = state.currentIndex === state.quiz.questions.length - 1;
+    el.nextQuestionBtn.textContent = isLast ? "結果を見る" : "次の問題へ";
+    el.nextQuestionBtn.classList.remove("hidden");
+  }
+
+  function initQuiz() {
+    el.nextQuestionBtn.addEventListener("click", () => {
+      if (state.currentIndex < state.quiz.questions.length - 1) {
+        state.currentIndex++;
+        renderQuestion();
+      } else {
+        finishQuiz();
+      }
+    });
+  }
+
+  /* ==========================================================
+   * 完了画面
+   * ========================================================== */
+  function finishQuiz() {
+    // 「超低ハードル」コンセプトのため、全問解き終えたら正答数に関わらず達成扱い
+    recordAchievement();
+    renderStats();
+
+    const total = state.quiz.questions.length;
+    const c = state.correctCount;
+    el.doneScore.textContent = `${total}問中 ${c}問 正解`;
+    el.doneMessage.textContent =
+      c === total
+        ? "パーフェクト！内容がしっかり頭に入っています 💯"
+        : c > 0
+        ? "よくできました！間違えた所をもう一度見直すとさらに◎"
+        : "取り組んだこと自体が大きな一歩。明日も机に座るだけでOK！";
+
+    showScreen("done");
+    launchConfetti();
+  }
+
+  function launchConfetti() {
+    const colors = ["#6366f1", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9"];
+    for (let i = 0; i < 60; i++) {
+      const p = document.createElement("div");
+      p.className = "confetti-piece";
+      p.style.left = `${Math.random() * 100}%`;
+      p.style.background = colors[i % colors.length];
+      p.style.animationDuration = `${1.8 + Math.random() * 1.5}s`;
+      p.style.animationDelay = `${Math.random() * 0.4}s`;
+      el.confetti.append(p);
+      p.addEventListener("animationend", () => p.remove());
+    }
+  }
+
+  // 最初からやり直す（写真・チェックをリセット）
+  function resetAll() {
+    state.selectedFile = null;
+    state.quiz = null;
+    el.photoInput.value = "";
+    if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
+    el.photoPreview.removeAttribute("src");
+    el.photoPreview.classList.add("hidden");
+    el.photoPlaceholder.classList.remove("hidden");
+    el.changePhotoBtn.classList.add("hidden");
+    el.generateBtn.disabled = true;
+    hideError();
+    renderShortSteps();
+    showScreen(1);
+  }
+
+  /* ==========================================================
+   * 初期化
+   * ========================================================== */
+  function init() {
+    initSettings();
+    initShortSteps();
+    initPhoto();
+    initQuiz();
+    el.restartBtn.addEventListener("click", resetAll);
+    renderStats();
+    showScreen(1);
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+
+</script>
+</body>
+</html>

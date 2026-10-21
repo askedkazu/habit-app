@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ちょいステップ習慣</title>
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="max-w-md mx-auto px-4 pb-16">
+
+    <!-- ===== ヘッダー ===== -->
+    <header class="flex items-center justify-between py-4">
+      <div>
+        <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
+        <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
+      </div>
+      <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- ===== 設定パネル（APIキー） ===== -->
+    <section id="settingsPanel" class="hidden card mb-4">
+      <h2 class="font-bold mb-2">設定</h2>
+      <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
+      <div class="flex gap-2">
+        <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off"
+               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
+      </div>
+      <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
+      <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
+      <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false"
+             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      <datalist id="modelOptions">
+        <option value="gemini-3.8-flash">推奨</option>
+      </datalist>
+      <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
+      <div class="flex gap-2 mt-3">
+        <button id="saveApiKey" class="btn-primary flex-1">保存</button>
+        <button id="clearApiKey" class="btn-ghost">削除</button>
+      </div>
+      <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
+      <p class="text-xs text-slate-400 mt-2">
+        ※キーはこの端末のブラウザ（localStorage）にのみ保存されます。
+        キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
+      </p>
+    </section>
+
+    <!-- ===== 達成状況 ===== -->
+    <section class="card mb-4 flex items-center justify-around text-center">
+      <div>
+        <p class="text-2xl font-bold text-indigo-600" id="streakCount">0</p>
+        <p class="text-xs text-slate-500">連続日数</p>
+      </div>
+      <div class="w-px h-10 bg-slate-200"></div>
+      <div>
+        <p class="text-2xl font-bold text-emerald-600" id="totalCount">0</p>
+        <p class="text-xs text-slate-500">累計達成</p>
+      </div>
+      <div class="w-px h-10 bg-slate-200"></div>
+      <div>
+        <p class="text-2xl" id="todayBadge">—</p>
+        <p class="text-xs text-slate-500">今日</p>
+      </div>
+    </section>
+
+    <!-- ===== 進捗インジケータ ===== -->
+    <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
+      <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+      <li class="step-line"></li>
+      <li class="step" data-step="2"><span>2</span>証拠写真</li>
+      <li class="step-line"></li>
+      <li class="step" data-step="3"><span>3</span>確認テスト</li>
+    </ol>
+
+    <!-- ===== STEP 1: ショートステップ ===== -->
+    <section id="step1" class="card screen">
+      <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
+      <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
+
+      <ul id="shortStepList" class="space-y-2"></ul>
+
+      <!-- 自分だけのステップ追加 -->
+      <form id="addStepForm" class="flex gap-2 mt-3">
+        <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）"
+               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button class="btn-ghost text-sm" type="submit">追加</button>
+      </form>
+
+      <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+        達成！ 次へ進む
+      </button>
+    </section>
+
+    <!-- ===== STEP 2: 証拠写真アップロード ===== -->
+    <section id="step2" class="card screen hidden">
+      <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
+      <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
+
+      <!-- capture="environment" でスマホは背面カメラが起動 -->
+      <label for="photoInput" id="photoDropzone"
+             class="flex flex-col items-center justify-center border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-xl h-56 cursor-pointer overflow-hidden relative">
+        <div id="photoPlaceholder" class="text-center text-indigo-500">
+          <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+          <p class="font-medium">タップしてカメラ起動 / 写真を選択</p>
+        </div>
+        <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
+      </label>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+
+      <button id="changePhotoBtn" class="hidden text-sm text-indigo-600 underline mt-2">写真を撮り直す</button>
+
+      <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+        写真を送信して問題生成
+      </button>
+      <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
+        APIキーなしでデモ問題を試す
+      </button>
+
+      <!-- ローディング表示 -->
+      <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-indigo-600">
+        <div class="spinner"></div>
+        <span class="text-sm">AIが問題を作成中…</span>
+      </div>
+      <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+
+      <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+    </section>
+
+    <!-- ===== STEP 3: 確認テスト ===== -->
+    <section id="step3" class="card screen hidden">
+      <div class="flex items-center justify-between mb-2">
+        <span id="quizProgress" class="text-sm font-medium text-indigo-600">Q1 / 3</span>
+        <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
+      </div>
+      <div class="h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
+        <div id="quizBar" class="h-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
+      </div>
+
+      <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
+      <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
+      <div id="quizChoices" class="space-y-2"></div>
+
+      <!-- 採点結果（正解/不正解＋解説） -->
+      <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+
+      <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
+    </section>
+
+    <!-- ===== 完了画面 ===== -->
+    <section id="stepDone" class="card screen hidden text-center">
+      <div class="text-6xl mb-3 celebrate">🎉</div>
+      <h2 class="text-2xl font-bold text-indigo-600 mb-2">テストクリア！習慣達成！</h2>
+      <p id="doneScore" class="text-slate-600 mb-1"></p>
+      <p id="doneMessage" class="text-sm text-slate-500 mb-6"></p>
+      <button id="restartBtn" class="btn-primary w-full py-3">もう一度チャレンジ</button>
+    </section>
+  </div>
+
+  <!-- 紙吹雪用レイヤー -->
+  <div id="confetti" class="pointer-events-none fixed inset-0 overflow-hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
