@@ -25,6 +25,17 @@
       </button>
     </header>
 
+    <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
+    <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
+      <img id="accountAvatar" class="hidden w-9 h-9 rounded-full" alt="" referrerpolicy="no-referrer" />
+      <div class="flex-1 min-w-0">
+        <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
+        <p id="accountStatus" class="text-xs text-slate-500 truncate">ログインすると、記録をスマホとPCで共有できます</p>
+      </div>
+      <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
+      <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
+    </section>
+
     <!-- ===== 設定パネル（APIキー） ===== -->
     <section id="settingsPanel" class="hidden card mb-4">
       <h2 class="font-bold mb-2">設定</h2>
@@ -48,7 +59,7 @@
       </div>
       <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
       <p class="text-xs text-slate-400 mt-2">
-        ※キーはこの端末のブラウザ（localStorage）にのみ保存されます。
+        ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
         キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
       </p>
     </section>
@@ -170,6 +181,7 @@
   <!-- 紙吹雪用レイヤー -->
   <div id="confetti" class="pointer-events-none fixed inset-0 overflow-hidden"></div>
 
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

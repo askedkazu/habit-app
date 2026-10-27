@@ -187,6 +187,17 @@ body {
       </button>
     </header>
 
+    <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
+    <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
+      <img id="accountAvatar" class="hidden w-9 h-9 rounded-full" alt="" referrerpolicy="no-referrer" />
+      <div class="flex-1 min-w-0">
+        <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
+        <p id="accountStatus" class="text-xs text-slate-500 truncate">ログインすると、記録をスマホとPCで共有できます</p>
+      </div>
+      <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
+      <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
+    </section>
+
     <!-- ===== 設定パネル（APIキー） ===== -->
     <section id="settingsPanel" class="hidden card mb-4">
       <h2 class="font-bold mb-2">設定</h2>
@@ -210,7 +221,7 @@ body {
       </div>
       <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
       <p class="text-xs text-slate-400 mt-2">
-        ※キーはこの端末のブラウザ（localStorage）にのみ保存されます。
+        ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
         キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
       </p>
     </section>
@@ -334,6 +345,33 @@ body {
 
   <script>
 /* ==========================================================
+   Firebase の設定（アカウント機能用）
+   ----------------------------------------------------------
+   Firebase コンソール → プロジェクトの設定 → マイアプリ（ウェブアプリ）
+   に表示される firebaseConfig の中身をここに貼り付ける。
+
+   null のままの場合はログイン機能が無効になり、
+   これまで通りこの端末のブラウザだけにデータを保存する。
+
+   ※この設定値は公開されても問題ない（秘密の鍵ではない）。
+     データの保護は Firestore のセキュリティルールで行う（README参照）。
+   ========================================================== */
+window.FIREBASE_CONFIG = null;
+
+/* 貼り付け例:
+window.FIREBASE_CONFIG = {
+  apiKey: "AIza...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project",
+  storageBucket: "your-project.firebasestorage.app",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef",
+};
+*/
+
+</script>
+  <script>
+/* ==========================================================
    ちょいステップ習慣 - アプリ本体
    ----------------------------------------------------------
    画面の流れ:
@@ -366,6 +404,9 @@ body {
 
   const GEMINI_ENDPOINT = (model) =>
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  // Firebase SDK の読み込み元（アカウント機能を使うときだけ読み込む）
+  const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 
   // 送信前に画像を縮小する際の最大辺（px）。通信量とAPIの負荷を抑えるため
   const MAX_IMAGE_SIZE = 1280;
@@ -419,6 +460,13 @@ body {
     saveApiKey: $("saveApiKey"),
     clearApiKey: $("clearApiKey"),
     apiKeyStatus: $("apiKeyStatus"),
+    // アカウント
+    accountBar: $("accountBar"),
+    accountAvatar: $("accountAvatar"),
+    accountName: $("accountName"),
+    accountStatus: $("accountStatus"),
+    loginBtn: $("loginBtn"),
+    logoutBtn: $("logoutBtn"),
     // 達成状況
     streakCount: $("streakCount"),
     totalCount: $("totalCount"),
@@ -484,6 +532,7 @@ body {
       }
     },
     set(key, value) {
+      scheduleCloudPush(); // ログイン中ならアカウントにも保存
       try {
         localStorage.setItem(key, value);
         return true;
@@ -492,6 +541,7 @@ body {
       }
     },
     remove(key) {
+      scheduleCloudPush();
       try {
         localStorage.removeItem(key);
       } catch {
@@ -589,6 +639,189 @@ body {
     const key = storage.get(STORAGE_KEYS.apiKey, "");
     const base = key ? `保存済みキー: ${key.slice(0, 4)}••••${key.slice(-4)}` : "APIキーは未設定です。";
     el.apiKeyStatus.textContent = msg ? `${msg}（${base}）` : base;
+  }
+
+  /* ==========================================================
+   * アカウント（Firebase Authentication + Cloud Firestore）
+   * ----------------------------------------------------------
+   * - firebase-config.js に設定があるときだけ有効になる
+   * - Googleでログインすると、users/{uid} のドキュメントに
+   *   APIキー・モデル・追加ステップ・達成履歴を保存し、端末間で共有する
+   * - localStorage は表示用のキャッシュとして使い続ける
+   *   （ログイン時はアカウントの内容で上書き、ログアウト時は消去）
+   * ========================================================== */
+  const cloud = {
+    auth: null,
+    db: null,
+    authMod: null, // firebase-auth モジュール
+    fsMod: null,   // firebase-firestore モジュール
+    user: null,
+    pulling: false, // アカウントから読み込み中は書き戻さない
+    pushTimer: null,
+  };
+
+  async function initCloud() {
+    const config = window.FIREBASE_CONFIG;
+    if (!config) return; // 未設定ならアカウント機能は使わない
+
+    el.accountBar.classList.remove("hidden");
+    el.loginBtn.addEventListener("click", login);
+    el.logoutBtn.addEventListener("click", logout);
+
+    // Googleログインはファイルを直接開いた状態（file://）では使えない
+    if (location.protocol === "file:") {
+      setAccountUI(null, "ログインは公開URL（GitHub Pages）から開いたときに使えます");
+      el.loginBtn.disabled = true;
+      return;
+    }
+
+    try {
+      // SDK は必要なときだけ動的に読み込む
+      const [appMod, authMod, fsMod] = await Promise.all([
+        import(`${FIREBASE_SDK}/firebase-app.js`),
+        import(`${FIREBASE_SDK}/firebase-auth.js`),
+        import(`${FIREBASE_SDK}/firebase-firestore.js`),
+      ]);
+      const app = appMod.initializeApp(config);
+      cloud.authMod = authMod;
+      cloud.fsMod = fsMod;
+      cloud.auth = authMod.getAuth(app);
+      cloud.db = fsMod.getFirestore(app);
+
+      // ログイン状態が変わるたび（ページを開いた直後も）呼ばれる
+      authMod.onAuthStateChanged(cloud.auth, async (user) => {
+        cloud.user = user;
+        setAccountUI(user);
+        if (user) await pullFromCloud();
+      });
+    } catch (err) {
+      console.error(err);
+      setAccountUI(null, "アカウント機能を読み込めませんでした");
+    }
+  }
+
+  async function login() {
+    if (!cloud.auth) return;
+    const { GoogleAuthProvider, signInWithPopup } = cloud.authMod;
+    try {
+      await signInWithPopup(cloud.auth, new GoogleAuthProvider());
+    } catch (err) {
+      console.error(err);
+      // ポップアップを閉じただけの場合は何も表示しない
+      if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
+      const msg =
+        err.code === "auth/unauthorized-domain"
+          ? "このURLはFirebaseで許可されていません（承認済みドメインに追加してください）"
+          : `ログインに失敗しました（${err.code || err.message}）`;
+      setAccountUI(null, msg);
+    }
+  }
+
+  async function logout() {
+    if (!cloud.auth) return;
+    // 保存待ちの変更があれば、ログアウト前にアカウントへ書き込んでおく
+    if (cloud.pushTimer) {
+      clearTimeout(cloud.pushTimer);
+      cloud.pushTimer = null;
+      await pushToCloud();
+    }
+    await cloud.authMod.signOut(cloud.auth);
+    // 次に使う人に記録やAPIキーが見えないよう、この端末のデータを消す
+    Object.values(STORAGE_KEYS).forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* noop */
+      }
+    });
+    refreshUserDataUI();
+  }
+
+  function setAccountUI(user, statusMsg) {
+    el.loginBtn.classList.toggle("hidden", !!user);
+    el.logoutBtn.classList.toggle("hidden", !user);
+    el.accountAvatar.classList.toggle("hidden", !user?.photoURL);
+    if (user?.photoURL) el.accountAvatar.src = user.photoURL;
+    el.accountName.textContent = user ? user.displayName || user.email || "ログイン中" : "ログインしていません";
+    el.accountStatus.textContent =
+      statusMsg || (user ? "記録はアカウントに保存されています" : "ログインすると、記録をスマホとPCで共有できます");
+  }
+
+  function userDocRef() {
+    return cloud.fsMod.doc(cloud.db, "users", cloud.user.uid);
+  }
+
+  // アカウントのデータを読み込み、この端末に反映する
+  async function pullFromCloud() {
+    cloud.pulling = true;
+    try {
+      const snap = await cloud.fsMod.getDoc(userDocRef());
+      if (snap.exists()) {
+        const d = snap.data();
+        writeLocal(STORAGE_KEYS.apiKey, d.apiKey || null);
+        writeLocal(STORAGE_KEYS.model, d.model || null);
+        writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
+        writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
+      } else {
+        // 初めてのログイン：この端末の記録をアカウントに引き継ぐ
+        await pushToCloud();
+      }
+      refreshUserDataUI();
+    } catch (err) {
+      console.error(err);
+      setAccountUI(cloud.user, "アカウントのデータを読み込めませんでした");
+    } finally {
+      cloud.pulling = false;
+    }
+  }
+
+  // この端末のデータをアカウントに保存する
+  async function pushToCloud() {
+    cloud.pushTimer = null;
+    if (!cloud.user) return;
+    const { setDoc, serverTimestamp, arrayUnion } = cloud.fsMod;
+    const data = {
+      apiKey: storage.get(STORAGE_KEYS.apiKey, ""),
+      model: storage.get(STORAGE_KEYS.model, ""),
+      customSteps: storage.getJSON(STORAGE_KEYS.customSteps, []),
+      updatedAt: serverTimestamp(),
+    };
+    // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
+    const history = getHistory();
+    if (history.length) data.history = arrayUnion(...history);
+    try {
+      await setDoc(userDocRef(), data, { merge: true });
+      setAccountUI(cloud.user);
+    } catch (err) {
+      console.error(err);
+      setAccountUI(cloud.user, "アカウントへの保存に失敗しました");
+    }
+  }
+
+  // 保存操作が続いても1回にまとめてアカウントへ書き込む
+  function scheduleCloudPush() {
+    if (!cloud.user || cloud.pulling) return;
+    clearTimeout(cloud.pushTimer);
+    cloud.pushTimer = setTimeout(pushToCloud, 300);
+  }
+
+  // アカウントから読み込んだ値をそのまま localStorage に書く（書き戻しはしない）
+  function writeLocal(key, value) {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {
+      /* noop */
+    }
+  }
+
+  // ログイン・ログアウトでデータが入れ替わったときに画面を更新する
+  function refreshUserDataUI() {
+    el.apiKeyInput.value = storage.get(STORAGE_KEYS.apiKey, "");
+    el.modelSelect.value = getModel();
+    updateApiKeyStatus();
+    renderShortSteps();
+    renderStats();
   }
 
   /* ==========================================================
@@ -1173,6 +1406,7 @@ body {
     el.restartBtn.addEventListener("click", resetAll);
     renderStats();
     showScreen(1);
+    initCloud();
   }
 
   document.addEventListener("DOMContentLoaded", init);
