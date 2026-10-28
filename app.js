@@ -108,7 +108,7 @@
     photoInput: $("photoInput"),
     photoPreview: $("photoPreview"),
     photoPlaceholder: $("photoPlaceholder"),
-    changePhotoBtn: $("changePhotoBtn"),
+    cameraInput: $("cameraInput"),
     generateBtn: $("generateBtn"),
     demoBtn: $("demoBtn"),
     loading: $("loading"),
@@ -571,28 +571,27 @@
    * STEP2: 証拠写真のアップロード
    * ========================================================== */
   function initPhoto() {
-    el.photoInput.addEventListener("change", () => {
-      const file = el.photoInput.files && el.photoInput.files[0];
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        showError("画像ファイルを選択してください。");
-        return;
-      }
-      state.selectedFile = file;
-      hideError();
+    // カメラ撮影・アルバム選択のどちらでも同じ処理をする
+    [el.cameraInput, el.photoInput].forEach((input) => {
+      input.addEventListener("change", () => {
+        const file = input.files && input.files[0];
+        input.value = ""; // 同じ写真を選び直しても change が発火するように
+        if (!file) return;
+        // HEIC などは type が空のことがあるので、空なら拡張子で判定する
+        if (file.type ? !file.type.startsWith("image/") : !/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name)) {
+          showError("画像ファイルを選択してください。");
+          return;
+        }
+        state.selectedFile = file;
+        hideError();
 
-      // プレビュー表示（Object URL を使うと大きな画像でも軽量）
-      if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
-      el.photoPreview.src = URL.createObjectURL(file);
-      el.photoPreview.classList.remove("hidden");
-      el.photoPlaceholder.classList.add("hidden");
-      el.changePhotoBtn.classList.remove("hidden");
-      el.generateBtn.disabled = false;
-    });
-
-    el.changePhotoBtn.addEventListener("click", () => {
-      el.photoInput.value = ""; // 同じファイルを選び直しても change が発火するように
-      el.photoInput.click();
+        // プレビュー表示（Object URL を使うと大きな画像でも軽量）
+        if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
+        el.photoPreview.src = URL.createObjectURL(file);
+        el.photoPreview.classList.remove("hidden");
+        el.photoPlaceholder.classList.add("hidden");
+        el.generateBtn.disabled = false;
+      });
     });
 
     el.generateBtn.addEventListener("click", onGenerateQuiz);
@@ -1094,12 +1093,10 @@
   function resetAll() {
     state.selectedFile = null;
     state.quiz = null;
-    el.photoInput.value = "";
     if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
     el.photoPreview.removeAttribute("src");
     el.photoPreview.classList.add("hidden");
     el.photoPlaceholder.classList.remove("hidden");
-    el.changePhotoBtn.classList.add("hidden");
     el.generateBtn.disabled = true;
     hideError();
     renderShortSteps();

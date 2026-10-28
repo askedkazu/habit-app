@@ -156,5 +156,15 @@ body {
   to { transform: translateY(105vh) rotate(720deg); }
 }
 
+/* ファイル選択の入力欄は見えなくするだけにする（display:none だと一部のスマホでラベルのタップに反応しない） */
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* Tailwind CDN が読み込めない環境でも画面切替が壊れないようにするフォールバック */
 .hidden { display: none !important; }

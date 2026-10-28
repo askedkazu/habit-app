@@ -165,6 +165,16 @@ body {
   to { transform: translateY(105vh) rotate(720deg); }
 }
 
+/* ファイル選択の入力欄は見えなくするだけにする（display:none だと一部のスマホでラベルのタップに反応しない） */
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* Tailwind CDN が読み込めない環境でも画面切替が壊れないようにするフォールバック */
 .hidden { display: none !important; }
 
@@ -277,7 +287,7 @@ body {
       <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
       <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
 
-      <!-- capture="environment" でスマホは背面カメラが起動 -->
+      <!-- プレビュー枠（タップするとアルバムから選択） -->
       <label for="photoInput" id="photoDropzone"
              class="flex flex-col items-center justify-center border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-xl h-56 cursor-pointer overflow-hidden relative">
         <div id="photoPlaceholder" class="text-center text-indigo-500">
@@ -285,19 +295,25 @@ body {
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
             <circle cx="12" cy="13" r="3"/>
           </svg>
-          <p class="font-medium">タップしてカメラ起動 / 写真を選択</p>
+          <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
         </div>
         <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
       </label>
-      <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden" />
 
-      <button id="changePhotoBtn" class="hidden text-sm text-indigo-600 underline mt-2">写真を撮り直す</button>
+      <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <label for="cameraInput" class="btn-ghost text-sm text-center cursor-pointer py-3">📷 カメラで撮る</label>
+        <label for="photoInput" class="btn-ghost text-sm text-center cursor-pointer py-3">🖼️ アルバムから選ぶ</label>
+      </div>
+      <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
+      <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
+      <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
 
       <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
         写真を送信して問題生成
       </button>
       <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
-        APIキーなしでデモ問題を試す
+        デモ問題で試す（AIを使わない）
       </button>
 
       <!-- ローディング表示 -->
@@ -478,7 +494,7 @@ window.FIREBASE_CONFIG = {
     photoInput: $("photoInput"),
     photoPreview: $("photoPreview"),
     photoPlaceholder: $("photoPlaceholder"),
-    changePhotoBtn: $("changePhotoBtn"),
+    cameraInput: $("cameraInput"),
     generateBtn: $("generateBtn"),
     demoBtn: $("demoBtn"),
     loading: $("loading"),
@@ -941,28 +957,27 @@ window.FIREBASE_CONFIG = {
    * STEP2: 証拠写真のアップロード
    * ========================================================== */
   function initPhoto() {
-    el.photoInput.addEventListener("change", () => {
-      const file = el.photoInput.files && el.photoInput.files[0];
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        showError("画像ファイルを選択してください。");
-        return;
-      }
-      state.selectedFile = file;
-      hideError();
+    // カメラ撮影・アルバム選択のどちらでも同じ処理をする
+    [el.cameraInput, el.photoInput].forEach((input) => {
+      input.addEventListener("change", () => {
+        const file = input.files && input.files[0];
+        input.value = ""; // 同じ写真を選び直しても change が発火するように
+        if (!file) return;
+        // HEIC などは type が空のことがあるので、空なら拡張子で判定する
+        if (file.type ? !file.type.startsWith("image/") : !/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name)) {
+          showError("画像ファイルを選択してください。");
+          return;
+        }
+        state.selectedFile = file;
+        hideError();
 
-      // プレビュー表示（Object URL を使うと大きな画像でも軽量）
-      if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
-      el.photoPreview.src = URL.createObjectURL(file);
-      el.photoPreview.classList.remove("hidden");
-      el.photoPlaceholder.classList.add("hidden");
-      el.changePhotoBtn.classList.remove("hidden");
-      el.generateBtn.disabled = false;
-    });
-
-    el.changePhotoBtn.addEventListener("click", () => {
-      el.photoInput.value = ""; // 同じファイルを選び直しても change が発火するように
-      el.photoInput.click();
+        // プレビュー表示（Object URL を使うと大きな画像でも軽量）
+        if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
+        el.photoPreview.src = URL.createObjectURL(file);
+        el.photoPreview.classList.remove("hidden");
+        el.photoPlaceholder.classList.add("hidden");
+        el.generateBtn.disabled = false;
+      });
     });
 
     el.generateBtn.addEventListener("click", onGenerateQuiz);
@@ -1464,12 +1479,10 @@ window.FIREBASE_CONFIG = {
   function resetAll() {
     state.selectedFile = null;
     state.quiz = null;
-    el.photoInput.value = "";
     if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
     el.photoPreview.removeAttribute("src");
     el.photoPreview.classList.add("hidden");
     el.photoPlaceholder.classList.remove("hidden");
-    el.changePhotoBtn.classList.add("hidden");
     el.generateBtn.disabled = true;
     hideError();
     renderShortSteps();
