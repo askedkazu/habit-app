@@ -76,6 +76,11 @@ APIキーがなくても「APIキーなしでデモ問題を試す」で画面�
 5. プロジェクトの設定 → マイアプリ → ウェブアプリ（`</>`）を追加し、表示された `firebaseConfig` を `firebase-config.js` に貼り付ける
 6. **AI Logic** →「始める」→ **Gemini Developer API** を選んで有効化
    （これで利用者はAPIキー不要。ログインするだけで問題を生成できる）
+7. **App Check**（AIを他のサイトから勝手に使われないようにする）
+   - [Google Cloud の reCAPTCHA（Fraud Defense）](https://console.cloud.google.com/security/recaptcha) で
+     種類「ウェブ」、ドメイン `askedkazu.github.io` のキーを作成（チェックボックスのチャレンジはオフ）
+   - Firebase → セキュリティ → App Check → アプリ → ウェブアプリに **Fraud Defense** でそのキーを登録
+   - キーIDを `firebase-config.js` の `FIREBASE_APP_CHECK.siteKey` に設定
 
 - Firebase 設定済みで公開URLから開いた場合、問題生成は Firebase AI Logic 経由（APIキーはプロジェクト側で管理、利用料もプロジェクト持ち）。
   ファイルを直接開いた場合や Firebase 未設定の場合は、従来どおり自分の Gemini APIキーで動作する

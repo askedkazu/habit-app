@@ -22,11 +22,11 @@ window.FIREBASE_CONFIG = {
 
 /* ----------------------------------------------------------
    App Check（AIを自分のアプリ以外から使われないようにする仕組み）
-   - provider: "recaptcha-v3"（無料）または "recaptcha-enterprise"
+   - provider: "recaptcha-enterprise"（Fraud Defense。推奨）または "recaptcha-v3"（Classic。非推奨）
    - siteKey : reCAPTCHA のサイトキー（公開して問題ない値）
    null にすると App Check を使わない
    ---------------------------------------------------------- */
 window.FIREBASE_APP_CHECK = {
-  provider: "recaptcha-v3",
-  siteKey: "6Lf5-wQuAAAAAD1xifkCi_6F-OOIS39d9gmwgq9K",
+  provider: "recaptcha-enterprise", // Fraud Defense（旧称 reCAPTCHA Enterprise）
+  siteKey: "6Lfi1AQuAAAAAAjyajy3--qRmePUGPjTOIFTySu3",
 };
