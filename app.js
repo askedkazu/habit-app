@@ -326,6 +326,8 @@
         import(`${FIREBASE_SDK}/firebase-ai.js`),
       ]);
       const app = appMod.initializeApp(config);
+      // App Check は AI などを使う前に有効化しておく必要がある
+      await initAppCheck(app);
       cloud.authMod = authMod;
       cloud.fsMod = fsMod;
       cloud.aiMod = aiMod;
@@ -344,6 +346,23 @@
       console.error(err);
       setAccountUI(null, "アカウント機能を読み込めませんでした");
     }
+  }
+
+  /**
+   * App Check を有効化する（firebase-config.js の FIREBASE_APP_CHECK が設定されているときだけ）。
+   * reCAPTCHA で「本物のこのアプリからのリクエストか」を確認し、
+   * Firebase AI Logic などを他のサイトやスクリプトから勝手に使われないようにする。
+   */
+  async function initAppCheck(app) {
+    const appCheck = window.FIREBASE_APP_CHECK;
+    if (!appCheck?.siteKey) return;
+    const mod = await import(`${FIREBASE_SDK}/firebase-app-check.js`);
+    const Provider =
+      appCheck.provider === "recaptcha-enterprise" ? mod.ReCaptchaEnterpriseProvider : mod.ReCaptchaV3Provider;
+    mod.initializeAppCheck(app, {
+      provider: new Provider(appCheck.siteKey),
+      isTokenAutoRefreshEnabled: true, // トークンの期限が切れる前に自動で更新する
+    });
   }
 
   async function login() {
@@ -896,6 +915,9 @@
     } catch (err) {
       console.error(err);
       const msg = String(err?.message || "");
+      if (/App Check/i.test(msg)) {
+        throw new Error(`アプリの確認（App Check）に失敗しました。ページを再読み込みしてもだめなら、管理者に連絡してください。\n${msg}`);
+      }
       if (/429|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
         throw new Error("AIが混み合っています。少し時間をおいてから、もう一度お試しください。");
       }

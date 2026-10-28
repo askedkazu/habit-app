@@ -19,3 +19,18 @@ window.FIREBASE_CONFIG = {
   appId: "1:49158191283:web:fa177b08eb7ecb7f3ad8c6",
   measurementId: "G-4TPPEGELX5",
 };
+
+/* ----------------------------------------------------------
+   App Check（AIを自分のアプリ以外から使われないようにする仕組み）
+   - provider: "recaptcha-v3"（無料）または "recaptcha-enterprise"
+   - siteKey : reCAPTCHA のサイトキー（公開して問題ない値）
+   null のままなら App Check を使わない
+   ---------------------------------------------------------- */
+window.FIREBASE_APP_CHECK = null;
+
+/* 設定例:
+window.FIREBASE_APP_CHECK = {
+  provider: "recaptcha-v3",
+  siteKey: "6L...",
+};
+*/
