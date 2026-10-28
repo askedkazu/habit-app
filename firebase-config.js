@@ -4,21 +4,18 @@
    Firebase コンソール → プロジェクトの設定 → マイアプリ（ウェブアプリ）
    に表示される firebaseConfig の中身をここに貼り付ける。
 
-   null のままの場合はログイン機能が無効になり、
+   null にした場合はログイン機能が無効になり、
    これまで通りこの端末のブラウザだけにデータを保存する。
 
    ※この設定値は公開されても問題ない（秘密の鍵ではない）。
      データの保護は Firestore のセキュリティルールで行う（README参照）。
    ========================================================== */
-window.FIREBASE_CONFIG = null;
-
-/* 貼り付け例:
 window.FIREBASE_CONFIG = {
-  apiKey: "AIza...",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  storageBucket: "your-project.firebasestorage.app",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef",
+  apiKey: "AIzaSyDTeVeu8Aue6-BbNMY1dBLhOEMwUCQSozg",
+  authDomain: "habit-app-e3b8b.firebaseapp.com",
+  projectId: "habit-app-e3b8b",
+  storageBucket: "habit-app-e3b8b.firebasestorage.app",
+  messagingSenderId: "49158191283",
+  appId: "1:49158191283:web:fa177b08eb7ecb7f3ad8c6",
+  measurementId: "G-4TPPEGELX5",
 };
-*/
