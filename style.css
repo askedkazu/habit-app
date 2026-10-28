@@ -156,6 +156,24 @@ body {
   to { transform: translateY(105vh) rotate(720deg); }
 }
 
+/* 引っぱって更新：画面上部から下りてくる案内 */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 50;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -100%);
+}
+
 /* ファイル選択の入力欄は見えなくするだけにする（display:none だと一部のスマホでラベルのタップに反応しない） */
 .file-input-hidden {
   position: absolute;

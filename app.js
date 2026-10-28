@@ -109,6 +109,9 @@
     photoPreview: $("photoPreview"),
     photoPlaceholder: $("photoPlaceholder"),
     cameraInput: $("cameraInput"),
+    // 再読み込み
+    reloadBtn: $("reloadBtn"),
+    pullIndicator: $("pullIndicator"),
     generateBtn: $("generateBtn"),
     demoBtn: $("demoBtn"),
     loading: $("loading"),
@@ -1104,6 +1107,70 @@
   }
 
   /* ==========================================================
+   * 再読み込み（ホーム画面から開いたとき用）
+   * ----------------------------------------------------------
+   * iPhone でホーム画面に追加して開くと、ブラウザの再読み込みボタンが
+   * ないため、ボタンと「引っぱって更新」を用意する
+   * ========================================================== */
+  function isStandalone() {
+    return window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  }
+
+  // GitHub Pages はファイルを数分キャッシュするため、最新を取り直してから再読み込みする
+  async function hardReload() {
+    const assets = ["./", "index.html", "style.css", "firebase-config.js", "app.js"];
+    await Promise.all(assets.map((url) => fetch(url, { cache: "reload" }).catch(() => {})));
+    location.reload();
+  }
+
+  function initPullToRefresh() {
+    const THRESHOLD = 80; // これ以上引っぱって離すと再読み込み（px）
+    const indicator = el.pullIndicator;
+    let startY = null;
+    let distance = 0;
+
+    const resetIndicator = () => {
+      indicator.style.opacity = "0";
+      indicator.style.transform = "";
+    };
+
+    window.addEventListener(
+      "touchstart",
+      (e) => {
+        // 画面の一番上から、指1本で引っぱり始めたときだけ反応する
+        startY = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
+        distance = 0;
+      },
+      { passive: true }
+    );
+
+    window.addEventListener(
+      "touchmove",
+      (e) => {
+        if (startY === null) return;
+        distance = e.touches[0].clientY - startY;
+        if (distance <= 0) return resetIndicator();
+        const d = Math.min(distance, THRESHOLD * 1.5);
+        indicator.style.opacity = String(Math.min(d / THRESHOLD, 1));
+        indicator.style.transform = `translate(-50%, ${d * 0.6}px)`;
+        indicator.textContent = distance >= THRESHOLD ? "↻ 離すと再読み込み" : "↓ 引っぱって更新";
+      },
+      { passive: true }
+    );
+
+    window.addEventListener("touchend", () => {
+      if (startY === null) return;
+      startY = null;
+      if (distance >= THRESHOLD) {
+        indicator.textContent = "再読み込み中…";
+        hardReload();
+      } else {
+        resetIndicator();
+      }
+    });
+  }
+
+  /* ==========================================================
    * 初期化
    * ========================================================== */
   function init() {
@@ -1112,6 +1179,11 @@
     initPhoto();
     initQuiz();
     el.restartBtn.addEventListener("click", resetAll);
+    if (isStandalone()) {
+      el.reloadBtn.classList.remove("hidden");
+      el.reloadBtn.addEventListener("click", hardReload);
+      initPullToRefresh();
+    }
     renderStats();
     showScreen(1);
     initCloud();

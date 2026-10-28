@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ちょいステップ習慣</title>
+  <!-- iPhone で「ホーム画面に追加」したときのアプリ名 -->
+  <meta name="apple-mobile-web-app-title" content="ちょいステップ" />
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -165,6 +167,24 @@ body {
   to { transform: translateY(105vh) rotate(720deg); }
 }
 
+/* 引っぱって更新：画面上部から下りてくる案内 */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 50;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -100%);
+}
+
 /* ファイル選択の入力欄は見えなくするだけにする（display:none だと一部のスマホでラベルのタップに反応しない） */
 .file-input-hidden {
   position: absolute;
@@ -189,13 +209,24 @@ body {
         <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
         <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
       </div>
+      <div class="flex items-center gap-1">
+      <!-- ホーム画面から開いた（ブラウザの再読み込みボタンがない）ときだけ表示 -->
+      <button id="reloadBtn" class="hidden p-2 rounded-full hover:bg-slate-200" aria-label="再読み込み">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.1 15a7 7 0 0 0 12.9 1.9M18.9 9A7 7 0 0 0 6 7.1"/>
+        </svg>
+      </button>
       <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
           <circle cx="12" cy="12" r="3"/>
         </svg>
       </button>
+      </div>
     </header>
+
+    <!-- 引っぱって更新のインジケーター -->
+    <div id="pullIndicator" class="pull-indicator" aria-hidden="true">↓ 離すと再読み込み</div>
 
     <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
     <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
@@ -495,6 +526,9 @@ window.FIREBASE_CONFIG = {
     photoPreview: $("photoPreview"),
     photoPlaceholder: $("photoPlaceholder"),
     cameraInput: $("cameraInput"),
+    // 再読み込み
+    reloadBtn: $("reloadBtn"),
+    pullIndicator: $("pullIndicator"),
     generateBtn: $("generateBtn"),
     demoBtn: $("demoBtn"),
     loading: $("loading"),
@@ -1490,6 +1524,70 @@ window.FIREBASE_CONFIG = {
   }
 
   /* ==========================================================
+   * 再読み込み（ホーム画面から開いたとき用）
+   * ----------------------------------------------------------
+   * iPhone でホーム画面に追加して開くと、ブラウザの再読み込みボタンが
+   * ないため、ボタンと「引っぱって更新」を用意する
+   * ========================================================== */
+  function isStandalone() {
+    return window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  }
+
+  // GitHub Pages はファイルを数分キャッシュするため、最新を取り直してから再読み込みする
+  async function hardReload() {
+    const assets = ["./", "index.html", "style.css", "firebase-config.js", "app.js"];
+    await Promise.all(assets.map((url) => fetch(url, { cache: "reload" }).catch(() => {})));
+    location.reload();
+  }
+
+  function initPullToRefresh() {
+    const THRESHOLD = 80; // これ以上引っぱって離すと再読み込み（px）
+    const indicator = el.pullIndicator;
+    let startY = null;
+    let distance = 0;
+
+    const resetIndicator = () => {
+      indicator.style.opacity = "0";
+      indicator.style.transform = "";
+    };
+
+    window.addEventListener(
+      "touchstart",
+      (e) => {
+        // 画面の一番上から、指1本で引っぱり始めたときだけ反応する
+        startY = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null;
+        distance = 0;
+      },
+      { passive: true }
+    );
+
+    window.addEventListener(
+      "touchmove",
+      (e) => {
+        if (startY === null) return;
+        distance = e.touches[0].clientY - startY;
+        if (distance <= 0) return resetIndicator();
+        const d = Math.min(distance, THRESHOLD * 1.5);
+        indicator.style.opacity = String(Math.min(d / THRESHOLD, 1));
+        indicator.style.transform = `translate(-50%, ${d * 0.6}px)`;
+        indicator.textContent = distance >= THRESHOLD ? "↻ 離すと再読み込み" : "↓ 引っぱって更新";
+      },
+      { passive: true }
+    );
+
+    window.addEventListener("touchend", () => {
+      if (startY === null) return;
+      startY = null;
+      if (distance >= THRESHOLD) {
+        indicator.textContent = "再読み込み中…";
+        hardReload();
+      } else {
+        resetIndicator();
+      }
+    });
+  }
+
+  /* ==========================================================
    * 初期化
    * ========================================================== */
   function init() {
@@ -1498,6 +1596,11 @@ window.FIREBASE_CONFIG = {
     initPhoto();
     initQuiz();
     el.restartBtn.addEventListener("click", resetAll);
+    if (isStandalone()) {
+      el.reloadBtn.classList.remove("hidden");
+      el.reloadBtn.addEventListener("click", hardReload);
+      initPullToRefresh();
+    }
     renderStats();
     showScreen(1);
     initCloud();

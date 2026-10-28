@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ちょいステップ習慣</title>
+  <!-- iPhone で「ホーム画面に追加」したときのアプリ名 -->
+  <meta name="apple-mobile-web-app-title" content="ちょいステップ" />
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
@@ -17,13 +19,24 @@
         <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
         <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
       </div>
+      <div class="flex items-center gap-1">
+      <!-- ホーム画面から開いた（ブラウザの再読み込みボタンがない）ときだけ表示 -->
+      <button id="reloadBtn" class="hidden p-2 rounded-full hover:bg-slate-200" aria-label="再読み込み">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.1 15a7 7 0 0 0 12.9 1.9M18.9 9A7 7 0 0 0 6 7.1"/>
+        </svg>
+      </button>
       <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
           <circle cx="12" cy="12" r="3"/>
         </svg>
       </button>
+      </div>
     </header>
+
+    <!-- 引っぱって更新のインジケーター -->
+    <div id="pullIndicator" class="pull-indicator" aria-hidden="true">↓ 離すと再読み込み</div>
 
     <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
     <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
