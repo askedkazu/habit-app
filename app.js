@@ -215,8 +215,13 @@
     el.modelSelect.value = getModel();
     updateApiKeyStatus();
 
-    // APIキー未設定なら最初から設定パネルを開いておく
-    if (!savedKey) el.settingsPanel.classList.remove("hidden");
+    // Firebase 経由でAIを使える場合、利用者はAPIキーを設定しなくてよいので設定ボタンごと隠す
+    if (canUseFirebaseAI()) {
+      el.settingsToggle.classList.add("hidden");
+    } else if (!savedKey) {
+      // APIキー未設定なら最初から設定パネルを開いておく
+      el.settingsPanel.classList.remove("hidden");
+    }
 
     el.settingsToggle.addEventListener("click", () => {
       el.settingsPanel.classList.toggle("hidden");
@@ -282,10 +287,17 @@
     db: null,
     authMod: null, // firebase-auth モジュール
     fsMod: null,   // firebase-firestore モジュール
+    aiMod: null,   // firebase-ai モジュール
+    ai: null,      // Firebase AI Logic のインスタンス
     user: null,
     pulling: false, // アカウントから読み込み中は書き戻さない
     pushTimer: null,
   };
+
+  // Firebase 経由でAIを呼べる環境か（設定があり、公開URLなどから開いている）
+  function canUseFirebaseAI() {
+    return !!window.FIREBASE_CONFIG && location.protocol !== "file:";
+  }
 
   async function initCloud() {
     const config = window.FIREBASE_CONFIG;
@@ -304,16 +316,20 @@
 
     try {
       // SDK は必要なときだけ動的に読み込む
-      const [appMod, authMod, fsMod] = await Promise.all([
+      const [appMod, authMod, fsMod, aiMod] = await Promise.all([
         import(`${FIREBASE_SDK}/firebase-app.js`),
         import(`${FIREBASE_SDK}/firebase-auth.js`),
         import(`${FIREBASE_SDK}/firebase-firestore.js`),
+        import(`${FIREBASE_SDK}/firebase-ai.js`),
       ]);
       const app = appMod.initializeApp(config);
       cloud.authMod = authMod;
       cloud.fsMod = fsMod;
+      cloud.aiMod = aiMod;
       cloud.auth = authMod.getAuth(app);
       cloud.db = fsMod.getFirestore(app);
+      // Firebase AI Logic（Gemini Developer API）。APIキーは Firebase 側で管理される
+      cloud.ai = aiMod.getAI(app, { backend: new aiMod.GoogleAIBackend() });
 
       // ログイン状態が変わるたび（ページを開いた直後も）呼ばれる
       authMod.onAuthStateChanged(cloud.auth, async (user) => {
@@ -371,7 +387,7 @@
     if (user?.photoURL) el.accountAvatar.src = user.photoURL;
     el.accountName.textContent = user ? user.displayName || user.email || "ログイン中" : "ログインしていません";
     el.accountStatus.textContent =
-      statusMsg || (user ? "記録はアカウントに保存されています" : "ログインすると、記録をスマホとPCで共有できます");
+      statusMsg || (user ? "記録はアカウントに保存されています" : "ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます");
   }
 
   function userDocRef() {
@@ -593,8 +609,20 @@
 
   // 「写真を送信して問題生成」ボタンの処理
   async function onGenerateQuiz() {
+    // Firebase 経由（利用者はログインだけでOK）か、自分のAPIキーで直接呼ぶかを決める
+    const useFirebase = canUseFirebaseAI();
     const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
-    if (!apiKey) {
+
+    if (useFirebase && !cloud.user) {
+      showError("問題を作るには、画面上の「Googleでログイン」からログインしてください。");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (useFirebase && !cloud.ai) {
+      showError("AIの準備ができていません。ページを再読み込みしてください。");
+      return;
+    }
+    if (!useFirebase && !apiKey) {
       showError("Gemini APIキーが未設定です。右上の⚙️から設定してください。");
       el.settingsPanel.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -609,8 +637,9 @@
     hideError();
     try {
       const { base64, mimeType } = await fileToResizedBase64(state.selectedFile, MAX_IMAGE_SIZE);
-      const model = getModel();
-      const quiz = await generateQuizWithGemini({ apiKey, model, base64, mimeType });
+      const quiz = useFirebase
+        ? await generateQuizWithFirebase({ base64, mimeType })
+        : await generateQuizWithGemini({ apiKey, model: getModel(), base64, mimeType });
       startQuiz(quiz);
     } catch (err) {
       console.error(err);
@@ -824,6 +853,61 @@
       throw new Error(`AIから回答が得られませんでした（理由: ${reason}）。`);
     }
 
+    return parseQuizJson(text);
+  }
+
+  /**
+   * Firebase AI Logic 経由で、画像から3問のクイズを生成する。
+   * APIキーは Firebase プロジェクト側で管理されるため、利用者の設定は不要。
+   * モデルはサービス側で決める（DEFAULT_MODEL）。
+   */
+  async function generateQuizWithFirebase({ base64, mimeType }) {
+    const { getGenerativeModel, Schema } = cloud.aiMod;
+
+    // QUIZ_RESPONSE_SCHEMA と同じ形を、Firebase SDK の Schema で表したもの
+    const schema = Schema.object({
+      properties: {
+        topic: Schema.string({ description: "写真から読み取った学習内容のテーマ（短く）" }),
+        questions: Schema.array({
+          minItems: 3,
+          maxItems: 3,
+          items: Schema.object({
+            properties: {
+              question: Schema.string({ description: "問題文" }),
+              choices: Schema.array({ items: Schema.string(), minItems: 4, maxItems: 4 }),
+              answerIndex: Schema.integer({ description: "正解の選択肢のインデックス（0始まり）" }),
+              explanation: Schema.string({ description: "正解の簡潔な解説" }),
+            },
+          }),
+        }),
+      },
+    });
+
+    const model = getGenerativeModel(cloud.ai, {
+      model: DEFAULT_MODEL,
+      generationConfig: { responseMimeType: "application/json", responseSchema: schema },
+    });
+
+    let result;
+    try {
+      result = await model.generateContent([QUIZ_PROMPT, { inlineData: { mimeType, data: base64 } }]);
+    } catch (err) {
+      console.error(err);
+      const msg = String(err?.message || "");
+      if (/429|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
+        throw new Error("AIが混み合っています。少し時間をおいてから、もう一度お試しください。");
+      }
+      if (/not.?found|404/i.test(msg)) {
+        throw new Error(`AIモデル「${DEFAULT_MODEL}」が使えなくなっています。管理者に連絡してください。\n${msg}`);
+      }
+      if (/blocked|SAFETY/i.test(msg)) {
+        throw new Error("画像がブロックされました。別の写真でお試しください。");
+      }
+      throw new Error(`問題の生成に失敗しました。\n${msg}`);
+    }
+
+    const text = result.response.text();
+    if (!text) throw new Error("AIから回答が得られませんでした。もう一度お試しください。");
     return parseQuizJson(text);
   }
 
