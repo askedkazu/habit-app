@@ -115,6 +115,7 @@
     generateBtn: $("generateBtn"),
     demoBtn: $("demoBtn"),
     loading: $("loading"),
+    loadingText: $("loadingText"),
     errorMsg: $("errorMsg"),
     // STEP3
     quizProgress: $("quizProgress"),
@@ -670,8 +671,22 @@
     }
   }
 
+  // 待ち時間が分かるよう、生成中は経過秒数を表示する
+  let loadingTimer = null;
+
   function setLoading(on) {
     el.loading.classList.toggle("hidden", !on);
+    clearInterval(loadingTimer);
+    if (on) {
+      const started = Date.now();
+      const tick = () => {
+        const sec = Math.floor((Date.now() - started) / 1000);
+        el.loadingText.textContent =
+          sec < 3 ? "写真を送信中…" : `AIが写真を読んで問題を作成中…（${sec}秒）`;
+      };
+      tick();
+      loadingTimer = setInterval(tick, 1000);
+    }
     el.generateBtn.disabled = on || !state.selectedFile;
     el.demoBtn.disabled = on;
     el.generateBtn.textContent = on ? "生成中…" : "写真を送信して問題生成";
@@ -814,6 +829,8 @@
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: QUIZ_RESPONSE_SCHEMA,
+        // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
+        thinkingConfig: { thinkingLevel: "low" },
       },
     };
 
@@ -883,7 +900,7 @@
    * モデルはサービス側で決める（DEFAULT_MODEL）。
    */
   async function generateQuizWithFirebase({ base64, mimeType }) {
-    const { getGenerativeModel, Schema } = cloud.aiMod;
+    const { getGenerativeModel, Schema, ThinkingLevel } = cloud.aiMod;
 
     // QUIZ_RESPONSE_SCHEMA と同じ形を、Firebase SDK の Schema で表したもの
     const schema = Schema.object({
@@ -906,7 +923,12 @@
 
     const model = getGenerativeModel(cloud.ai, {
       model: DEFAULT_MODEL,
-      generationConfig: { responseMimeType: "application/json", responseSchema: schema },
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      },
     });
 
     let result;
