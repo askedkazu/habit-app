@@ -116,6 +116,7 @@
     demoBtn: $("demoBtn"),
     loading: $("loading"),
     loadingText: $("loadingText"),
+    quizTiming: $("quizTiming"),
     errorMsg: $("errorMsg"),
     // STEP3
     quizProgress: $("quizProgress"),
@@ -293,6 +294,8 @@
     fsMod: null,   // firebase-firestore モジュール
     aiMod: null,   // firebase-ai モジュール
     ai: null,      // Firebase AI Logic のインスタンス
+    appCheck: null,    // App Check のインスタンス
+    appCheckMod: null, // firebase-app-check モジュール
     user: null,
     pulling: false, // アカウントから読み込み中は書き戻さない
     pushTimer: null,
@@ -360,7 +363,8 @@
     const mod = await import(`${FIREBASE_SDK}/firebase-app-check.js`);
     const Provider =
       appCheck.provider === "recaptcha-enterprise" ? mod.ReCaptchaEnterpriseProvider : mod.ReCaptchaV3Provider;
-    mod.initializeAppCheck(app, {
+    cloud.appCheckMod = mod;
+    cloud.appCheck = mod.initializeAppCheck(app, {
       provider: new Provider(appCheck.siteKey),
       isTokenAutoRefreshEnabled: true, // トークンの期限が切れる前に自動で更新する
     });
@@ -621,6 +625,7 @@
 
     el.demoBtn.addEventListener("click", () => {
       hideError();
+      el.quizTiming.textContent = "";
       startQuiz(structuredClone(DEMO_QUIZ));
     });
 
@@ -658,34 +663,62 @@
     setLoading(true);
     hideError();
     try {
+      setPhase("写真の準備");
       const { base64, mimeType } = await fileToResizedBase64(state.selectedFile, MAX_IMAGE_SIZE);
-      const quiz = useFirebase
-        ? await generateQuizWithFirebase({ base64, mimeType })
-        : await generateQuizWithGemini({ apiKey, model: getModel(), base64, mimeType });
+      timing.imageKB = Math.round((base64.length * 3) / 4 / 1024);
+      let quiz;
+      if (useFirebase) {
+        quiz = await generateQuizWithFirebase({ base64, mimeType });
+      } else {
+        setPhase("AIで問題を作成");
+        quiz = await generateQuizWithGemini({ apiKey, model: getModel(), base64, mimeType });
+      }
+      setLoading(false);
+      el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${timing.imageKB}KB）`;
       startQuiz(quiz);
     } catch (err) {
       console.error(err);
-      showError(err.message || "問題の生成に失敗しました。");
+      setLoading(false);
+      showError(`${err.message || "問題の生成に失敗しました。"}\n\n（${timingSummary()}）`);
     } finally {
       setLoading(false);
     }
   }
 
   // 待ち時間が分かるよう、生成中は経過秒数を表示する
+  // どの段階に何秒かかったかも記録し、遅いときの原因を調べられるようにする
   let loadingTimer = null;
+  const timing = { phase: "", phaseStart: 0, log: [] };
+
+  // 処理の段階を切り替える（前の段階の所要時間を記録）
+  function setPhase(label) {
+    const now = Date.now();
+    if (timing.phase) timing.log.push(`${timing.phase} ${((now - timing.phaseStart) / 1000).toFixed(1)}秒`);
+    timing.phase = label;
+    timing.phaseStart = now;
+    updateLoadingText();
+  }
+
+  function updateLoadingText() {
+    if (!timing.phase) return;
+    const sec = Math.floor((Date.now() - timing.phaseStart) / 1000);
+    el.loadingText.textContent = `${timing.phase}…（${sec}秒）`;
+  }
+
+  // 各段階の所要時間をまとめた文字列（例: 写真の準備 0.3秒 / AIで問題を作成 8.2秒）
+  function timingSummary() {
+    return timing.log.join(" / ");
+  }
 
   function setLoading(on) {
     el.loading.classList.toggle("hidden", !on);
     clearInterval(loadingTimer);
     if (on) {
-      const started = Date.now();
-      const tick = () => {
-        const sec = Math.floor((Date.now() - started) / 1000);
-        el.loadingText.textContent =
-          sec < 3 ? "写真を送信中…" : `AIが写真を読んで問題を作成中…（${sec}秒）`;
-      };
-      tick();
-      loadingTimer = setInterval(tick, 1000);
+      timing.phase = "";
+      timing.log = [];
+      loadingTimer = setInterval(updateLoadingText, 1000);
+    } else if (timing.phase) {
+      setPhase(""); // 最後の段階の時間を確定させる
     }
     el.generateBtn.disabled = on || !state.selectedFile;
     el.demoBtn.disabled = on;
@@ -931,6 +964,13 @@
       },
     });
 
+    // App Check の確認（初回は reCAPTCHA の読み込みがあるので、AIとは分けて計測する）
+    if (cloud.appCheck) {
+      setPhase("アプリの確認");
+      await cloud.appCheckMod.getToken(cloud.appCheck).catch(() => {});
+    }
+
+    setPhase("AIで問題を作成");
     let result;
     try {
       result = await model.generateContent([QUIZ_PROMPT, { inlineData: { mimeType, data: base64 } }]);
