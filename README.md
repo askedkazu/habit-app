@@ -1,5 +1,7 @@
 # ちょいステップ習慣（MVP）
 
+**▶ アプリを開く：https://askedkazu.github.io/habit-app/**
+
 「超低ハードルな達成記録」と「証拠写真からのAIテスト自動生成」を組み合わせた習慣化支援Webアプリです。
 HTML / CSS / JavaScript のみで動作し、ビルドは不要です。
 
