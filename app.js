@@ -22,6 +22,7 @@
     model: "habitApp.geminiModel",
     customSteps: "habitApp.customSteps",
     history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
+    logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
   };
 
   // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
@@ -79,7 +80,6 @@
 
   const el = {
     // 設定
-    settingsToggle: $("settingsToggle"),
     settingsPanel: $("settingsPanel"),
     apiKeyInput: $("apiKeyInput"),
     toggleKeyVisibility: $("toggleKeyVisibility"),
@@ -97,8 +97,35 @@
     // 達成状況
     streakCount: $("streakCount"),
     totalCount: $("totalCount"),
-    todayBadge: $("todayBadge"),
     stepper: $("stepper"),
+    // タブ・ヘッダー
+    headerTitle: $("headerTitle"),
+    flowCloseBtn: $("flowCloseBtn"),
+    tabBar: $("tabBar"),
+    // ホーム
+    startBtn: $("startBtn"),
+    homeDate: $("homeDate"),
+    homeGreeting: $("homeGreeting"),
+    todayChip: $("todayChip"),
+    weekRow: $("weekRow"),
+    monthCount: $("monthCount"),
+    bestStreak: $("bestStreak"),
+    nextBadgeIcon: $("nextBadgeIcon"),
+    nextBadgeText: $("nextBadgeText"),
+    nextBadgeBar: $("nextBadgeBar"),
+    recentLogs: $("recentLogs"),
+    homeLoginNudge: $("homeLoginNudge"),
+    homeLoginBtn: $("homeLoginBtn"),
+    // 記録
+    calPrev: $("calPrev"),
+    calNext: $("calNext"),
+    calTitle: $("calTitle"),
+    calSummary: $("calSummary"),
+    calGrid: $("calGrid"),
+    badgeGrid: $("badgeGrid"),
+    allLogs: $("allLogs"),
+    // 設定
+    customStepList: $("customStepList"),
     // STEP1
     shortStepList: $("shortStepList"),
     addStepForm: $("addStepForm"),
@@ -136,6 +163,9 @@
     // 完了
     doneScore: $("doneScore"),
     doneMessage: $("doneMessage"),
+    doneStreak: $("doneStreak"),
+    doneStreakNote: $("doneStreakNote"),
+    newBadges: $("newBadges"),
     restartBtn: $("restartBtn"),
     confetti: $("confetti"),
   };
@@ -226,17 +256,8 @@
     el.modelSelect.value = getModel();
     updateApiKeyStatus();
 
-    // Firebase 経由でAIを使える場合、利用者はAPIキーを設定しなくてよいので設定ボタンごと隠す
-    if (canUseFirebaseAI()) {
-      el.settingsToggle.classList.add("hidden");
-    } else if (!savedKey) {
-      // APIキー未設定なら最初から設定パネルを開いておく
-      el.settingsPanel.classList.remove("hidden");
-    }
-
-    el.settingsToggle.addEventListener("click", () => {
-      el.settingsPanel.classList.toggle("hidden");
-    });
+    // Firebase 経由でAIを使える場合、利用者はAPIキーを設定しなくてよいので設定欄ごと隠す
+    el.settingsPanel.classList.toggle("hidden", canUseFirebaseAI());
 
     el.toggleKeyVisibility.addEventListener("click", () => {
       const isPw = el.apiKeyInput.type === "password";
@@ -253,7 +274,6 @@
       storage.set(STORAGE_KEYS.apiKey, key);
       saveModel();
       updateApiKeyStatus("保存しました ✅");
-      setTimeout(() => el.settingsPanel.classList.add("hidden"), 600);
     });
 
     el.clearApiKey.addEventListener("click", () => {
@@ -318,6 +338,7 @@
 
     el.accountBar.classList.remove("hidden");
     el.loginBtn.addEventListener("click", login);
+    el.homeLoginBtn.addEventListener("click", login);
     el.logoutBtn.addEventListener("click", logout);
 
     // Googleログインはファイルを直接開いた状態（file://）では使えない
@@ -426,6 +447,8 @@
     el.accountName.textContent = user ? user.displayName || user.email || "ログイン中" : "ログインしていません";
     el.accountStatus.textContent =
       statusMsg || (user ? "記録はアカウントに保存されています" : "ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます");
+    // ホームでもログインをすすめる（ログインできる環境で未ログインのとき）
+    el.homeLoginNudge.classList.toggle("hidden", !!user || !cloud.auth);
   }
 
   function userDocRef() {
@@ -444,6 +467,7 @@
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
+        writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
       } else {
         // 初めてのログイン：この端末の記録をアカウントに引き継ぐ
@@ -472,6 +496,9 @@
     // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
     const history = getHistory();
     if (history.length) data.history = arrayUnion(...history);
+    // 記録も同じく追加していく（同じ内容の記録は Firestore 側で重複しない）
+    const logs = getLogs();
+    if (logs.length) data.logs = arrayUnion(...logs);
     try {
       await setDoc(userDocRef(), data, { merge: true });
       setAccountUI(cloud.user);
@@ -701,11 +728,233 @@
     return streak;
   }
 
+  // これまでで一番長く続いた連続日数
+  function calcBestStreak(history) {
+    const days = [...new Set(history)].sort().map(parseDateKey);
+    let best = 0;
+    let run = 0;
+    days.forEach((d, i) => {
+      const prev = days[i - 1];
+      run = prev && Math.round((d - prev) / 86400000) === 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+    });
+    return best;
+  }
+
+  // "YYYY-MM-DD" → その日の0時（ローカル時刻）
+  function parseDateKey(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+  /* ---------- 記録（タイムライン用） ---------- */
+  function getLogs() {
+    return storage.getJSON(STORAGE_KEYS.logs, []);
+  }
+
+  function sortLogs(logs) {
+    return [...logs].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  }
+
+  function addLog(log) {
+    const logs = sortLogs([...getLogs(), log]).slice(-365); // 端末には直近365件まで
+    storage.setJSON(STORAGE_KEYS.logs, logs);
+  }
+
+  /* ---------- バッジ ---------- */
+  // type: "streak" は自己ベストの連続日数、"total" は累計達成日数で判定する
+  const BADGES = [
+    { id: "first", icon: "🌱", name: "はじめの一歩", type: "total", goal: 1 },
+    { id: "streak3", icon: "🥉", name: "3日連続", type: "streak", goal: 3 },
+    { id: "streak7", icon: "🥈", name: "7日連続", type: "streak", goal: 7 },
+    { id: "total10", icon: "📘", name: "累計10日", type: "total", goal: 10 },
+    { id: "streak14", icon: "🥇", name: "14日連続", type: "streak", goal: 14 },
+    { id: "streak30", icon: "🏆", name: "30日連続", type: "streak", goal: 30 },
+    { id: "total50", icon: "📚", name: "累計50日", type: "total", goal: 50 },
+    { id: "total100", icon: "👑", name: "累計100日", type: "total", goal: 100 },
+  ];
+
+  function badgeProgress(badge, history) {
+    const value = badge.type === "streak" ? calcBestStreak(history) : new Set(history).size;
+    return { value: Math.min(value, badge.goal), earned: value >= badge.goal };
+  }
+
+  function earnedBadgeIds(history) {
+    return BADGES.filter((b) => badgeProgress(b, history).earned).map((b) => b.id);
+  }
+
+  function badgeTile(badge, locked) {
+    const div = document.createElement("div");
+    div.className = `badge-tile${locked ? " locked" : ""}`;
+    const icon = document.createElement("div");
+    icon.className = "badge-icon";
+    icon.textContent = badge.icon;
+    const name = document.createElement("p");
+    name.textContent = badge.name;
+    div.append(icon, name);
+    return div;
+  }
+
+  /* ---------- 画面の描画 ---------- */
   function renderStats() {
+    renderHome();
+    renderRecord();
+  }
+
+  function renderHome() {
     const history = getHistory();
+    const set = new Set(history);
+    const now = new Date();
+    const doneToday = set.has(dateKey(now));
+
+    el.homeDate.textContent = `${now.getMonth() + 1}月${now.getDate()}日（${WEEKDAYS[now.getDay()]}）`;
+    const hour = now.getHours();
+    el.homeGreeting.textContent = doneToday
+      ? "今日もよくがんばりました！"
+      : hour < 11 ? "おはよう！今日も一歩だけ" : hour < 17 ? "こんにちは！今日の一歩はまだ？" : "こんばんは！5分だけやってみよう";
+    el.todayChip.textContent = doneToday ? "今日は達成 ✓" : "今日はまだ";
+    el.todayChip.classList.toggle("done", doneToday);
     el.streakCount.textContent = calcStreak(history);
-    el.totalCount.textContent = history.length;
-    el.todayBadge.textContent = history.includes(dateKey()) ? "✅" : "—";
+    el.startBtn.textContent = doneToday ? "もう一度チャレンジする" : "今日のちょいステップを始める";
+
+    // 今週（月曜はじまり）の達成
+    el.weekRow.innerHTML = "";
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const key = dateKey(d);
+      const li = document.createElement("li");
+      li.className = "week-day";
+      if (set.has(key)) li.classList.add("done");
+      if (key === dateKey(now)) li.classList.add("today");
+      if (d > now) li.classList.add("future");
+      const dot = document.createElement("span");
+      dot.className = "week-dot";
+      dot.textContent = set.has(key) ? "🔥" : String(d.getDate());
+      const label = document.createElement("span");
+      label.textContent = WEEKDAYS[d.getDay()];
+      li.append(dot, label);
+      el.weekRow.append(li);
+    }
+
+    // 数字
+    const monthPrefix = dateKey(now).slice(0, 7);
+    el.totalCount.textContent = set.size;
+    el.monthCount.textContent = [...set].filter((k) => k.startsWith(monthPrefix)).length;
+    el.bestStreak.textContent = calcBestStreak(history);
+
+    // 次のバッジ（残り日数が一番少ないもの）
+    const next = BADGES.map((b) => ({ b, ...badgeProgress(b, history) }))
+      .filter((x) => !x.earned)
+      .sort((x, y) => x.b.goal - x.value - (y.b.goal - y.value))[0];
+    if (next) {
+      el.nextBadgeIcon.textContent = next.b.icon;
+      el.nextBadgeText.textContent = `${next.b.name} まで あと${next.b.goal - next.value}日`;
+      el.nextBadgeBar.style.width = `${(next.value / next.b.goal) * 100}%`;
+    } else {
+      el.nextBadgeIcon.textContent = "👑";
+      el.nextBadgeText.textContent = "すべてのバッジを獲得しました！";
+      el.nextBadgeBar.style.width = "100%";
+    }
+
+    renderLogList(el.recentLogs, getLogs().reverse().slice(0, 3));
+  }
+
+  // 記録の一覧（新しい順）を描画する
+  function renderLogList(container, logs) {
+    container.innerHTML = "";
+    if (logs.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty-note";
+      li.textContent = "まだ記録がありません。今日の一歩から始めよう！";
+      container.append(li);
+      return;
+    }
+    logs.forEach((log) => {
+      const d = parseDateKey(log.date);
+      const time = log.ts ? new Date(log.ts) : null;
+      const li = document.createElement("li");
+      li.className = "log-item";
+
+      const date = document.createElement("div");
+      date.className = "log-date";
+      const day = document.createElement("b");
+      day.textContent = d.getDate();
+      const md = document.createElement("span");
+      md.textContent = `${d.getMonth() + 1}月(${WEEKDAYS[d.getDay()]})`;
+      date.append(day, md);
+
+      const body = document.createElement("div");
+      body.className = "flex-1 min-w-0";
+      const topic = document.createElement("p");
+      topic.className = "text-sm font-bold truncate";
+      topic.textContent = log.topic || "ちょいステップ達成";
+      const sub = document.createElement("p");
+      sub.className = "text-xs text-slate-500";
+      const parts = [];
+      if (log.steps) parts.push(`ステップ ${log.steps}個`);
+      if (time) parts.push(`${time.getHours()}:${String(time.getMinutes()).padStart(2, "0")}`);
+      sub.textContent = parts.join(" ・ ");
+      body.append(topic, sub);
+
+      li.append(date, body);
+      if (log.total) {
+        const score = document.createElement("span");
+        score.className = `log-score${log.correct === log.total ? " perfect" : ""}`;
+        score.textContent = `${log.correct}/${log.total}問`;
+        li.append(score);
+      }
+      container.append(li);
+    });
+  }
+
+  // 記録タブ：カレンダー・バッジ・タイムライン
+  function renderRecord() {
+    const history = getHistory();
+    const set = new Set(history);
+    const now = new Date();
+    const month = state.calMonth || new Date(now.getFullYear(), now.getMonth(), 1);
+    state.calMonth = month;
+
+    el.calTitle.textContent = `${month.getFullYear()}年${month.getMonth() + 1}月`;
+    const prefix = dateKey(month).slice(0, 7);
+    el.calSummary.textContent = `${[...set].filter((k) => k.startsWith(prefix)).length}日達成`;
+    el.calNext.disabled = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();
+    el.calNext.style.opacity = el.calNext.disabled ? "0.3" : "1";
+
+    el.calGrid.innerHTML = "";
+    for (let i = 0; i < month.getDay(); i++) el.calGrid.append(document.createElement("span"));
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(month.getFullYear(), month.getMonth(), day);
+      const key = dateKey(d);
+      const cell = document.createElement("span");
+      cell.className = "cal-day";
+      if (set.has(key)) cell.classList.add("done");
+      if (key === dateKey(now)) cell.classList.add("today");
+      if (d > now) cell.classList.add("future");
+      cell.textContent = day;
+      el.calGrid.append(cell);
+    }
+
+    el.badgeGrid.innerHTML = "";
+    BADGES.forEach((b) => el.badgeGrid.append(badgeTile(b, !badgeProgress(b, history).earned)));
+
+    renderLogList(el.allLogs, getLogs().reverse());
+  }
+
+  function initRecord() {
+    el.calPrev.addEventListener("click", () => {
+      state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1);
+      renderRecord();
+    });
+    el.calNext.addEventListener("click", () => {
+      if (el.calNext.disabled) return;
+      state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1);
+      renderRecord();
+    });
   }
 
   /* ==========================================================
@@ -735,6 +984,38 @@
       el.shortStepList.append(li);
     });
     updateAchieveButton();
+    renderCustomStepList();
+  }
+
+  // 設定タブ：自分で追加したステップの一覧（削除できる）
+  function renderCustomStepList() {
+    const custom = storage.getJSON(STORAGE_KEYS.customSteps, []);
+    el.customStepList.innerHTML = "";
+    if (custom.length === 0) {
+      const li = document.createElement("li");
+      li.className = "text-sm text-slate-400 py-2";
+      li.textContent = "まだありません";
+      el.customStepList.append(li);
+      return;
+    }
+    custom.forEach((text, i) => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between gap-2 py-2";
+      const span = document.createElement("span");
+      span.className = "text-sm";
+      span.textContent = text;
+      const del = document.createElement("button");
+      del.className = "text-xs font-bold text-rose-500 px-2 py-1";
+      del.textContent = "削除";
+      del.addEventListener("click", () => {
+        const next = storage.getJSON(STORAGE_KEYS.customSteps, []);
+        next.splice(i, 1);
+        storage.setJSON(STORAGE_KEYS.customSteps, next);
+        renderShortSteps();
+      });
+      li.append(span, del);
+      el.customStepList.append(li);
+    });
   }
 
   // 1つでもチェックがあれば達成ボタンを有効化
@@ -760,7 +1041,10 @@
       renderShortSteps();
     });
 
-    el.achieveBtn.addEventListener("click", () => showScreen(2));
+    el.achieveBtn.addEventListener("click", () => {
+      state.checkedCount = el.shortStepList.querySelectorAll("input:checked").length;
+      showScreen(2);
+    });
   }
 
   /* ==========================================================
@@ -810,8 +1094,7 @@
     const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
 
     if (useFirebase && !cloud.user) {
-      showError("問題を作るには、画面上の「Googleでログイン」からログインしてください。");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      showError("問題を作るには、ホームか設定タブの「ログイン」からログインしてください。");
       return;
     }
     if (useFirebase && !cloud.ai) {
@@ -819,9 +1102,7 @@
       return;
     }
     if (!useFirebase && !apiKey) {
-      showError("Gemini APIキーが未設定です。右上の⚙️から設定してください。");
-      el.settingsPanel.classList.remove("hidden");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      showError("Gemini APIキーが未設定です。設定タブの「AIの設定」から入力してください。");
       return;
     }
     if (!state.selectedFile) {
@@ -1071,7 +1352,7 @@
       }
       if (res.status === 404) {
         throw new Error(
-          `モデル「${model}」は使えません。\n右上の⚙️の「モデル」欄に、下の案内にあるモデル名を入力して保存してください。\n\n${apiMsg}`
+          `モデル「${model}」は使えません。\n設定タブの「モデル」欄に、下の案内にあるモデル名を入力して保存してください。\n\n${apiMsg}`
         );
       }
       throw new Error(`Gemini API エラー (${res.status})\n${apiMsg}`);
@@ -1313,12 +1594,32 @@
    * 完了画面
    * ========================================================== */
   function finishQuiz() {
+    // 達成前の状態（連続日数の演出と、新しいバッジの判定に使う）
+    const before = getHistory();
+    const doneBefore = before.includes(dateKey());
+    const streakBefore = calcStreak(before);
+    const bestBefore = calcBestStreak(before);
+    const badgesBefore = earnedBadgeIds(before);
+
     // 「超低ハードル」コンセプトのため、全問解き終えたら正答数に関わらず達成扱い
+    const total = state.quiz.questions.length;
+    const c = state.correctCount;
+    addLog({
+      date: dateKey(),
+      ts: Date.now(),
+      topic: state.quiz.topic || "",
+      correct: c,
+      total,
+      steps: state.checkedCount || 0,
+    });
     recordAchievement();
     renderStats();
 
-    const total = state.quiz.questions.length;
-    const c = state.correctCount;
+    const after = getHistory();
+    const streakAfter = calcStreak(after);
+    showDoneStreak({ doneBefore, streakBefore, streakAfter, bestBefore });
+    showNewBadges(earnedBadgeIds(after).filter((id) => !badgesBefore.includes(id)));
+
     el.doneScore.textContent = `${total}問中 ${c}問 正解`;
     el.doneMessage.textContent =
       c === total
@@ -1331,8 +1632,43 @@
     launchConfetti();
   }
 
+  // 完了画面：連続日数が1つ増える演出
+  function showDoneStreak({ doneBefore, streakBefore, streakAfter, bestBefore }) {
+    el.doneStreak.classList.remove("bump");
+    if (doneBefore) {
+      el.doneStreak.textContent = streakAfter;
+      el.doneStreakNote.textContent = "今日はもう達成済み。復習ナイス！";
+      return;
+    }
+    el.doneStreak.textContent = streakBefore;
+    el.doneStreakNote.textContent =
+      streakAfter === 1
+        ? "今日からスタート！明日も続けよう"
+        : streakAfter > bestBefore
+          ? `自己ベスト更新！ ${streakBefore}日 → ${streakAfter}日`
+          : `${streakBefore}日 → ${streakAfter}日 に伸びました`;
+    setTimeout(() => {
+      el.doneStreak.textContent = streakAfter;
+      el.doneStreak.classList.add("bump");
+    }, 500);
+  }
+
+  // 完了画面：新しく獲得したバッジ
+  function showNewBadges(ids) {
+    el.newBadges.innerHTML = "";
+    el.newBadges.classList.toggle("hidden", ids.length === 0);
+    if (ids.length === 0) return;
+    const title = document.createElement("p");
+    title.className = "font-bold text-slate-700 mb-3";
+    title.textContent = "🎉 新しいバッジを獲得！";
+    const grid = document.createElement("div");
+    grid.className = "flex justify-center gap-2";
+    BADGES.filter((b) => ids.includes(b.id)).forEach((b) => grid.append(badgeTile(b, false)));
+    el.newBadges.append(title, grid);
+  }
+
   function launchConfetti() {
-    const colors = ["#6366f1", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9"];
+    const colors = ["#1a9cf0", "#22c55e", "#ff8a1f", "#f43f5e", "#facc15"];
     for (let i = 0; i < 60; i++) {
       const p = document.createElement("div");
       p.className = "confetti-piece";
@@ -1424,6 +1760,42 @@
   }
 
   /* ==========================================================
+   * タブ（ホーム / 記録 / 設定）と記録の流れ
+   * ========================================================== */
+  const TABS = {
+    home: { node: $("tabHome"), title: "ホーム" },
+    record: { node: $("tabRecord"), title: "記録" },
+    settings: { node: $("tabSettings"), title: "設定" },
+    flow: { node: $("tabFlow"), title: "今日のちょいステップ" },
+  };
+
+  function showTab(name) {
+    Object.entries(TABS).forEach(([key, tab]) => tab.node.classList.toggle("hidden", key !== name));
+    el.headerTitle.textContent = TABS[name].title;
+    // 記録の流れの間はタブバーを隠し、左上に「閉じる」を出す
+    const inFlow = name === "flow";
+    el.tabBar.classList.toggle("hidden", inFlow);
+    el.flowCloseBtn.classList.toggle("hidden", !inFlow);
+    el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (name === "record") renderRecord();
+    window.scrollTo({ top: 0 });
+  }
+
+  function initTabs() {
+    el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+    document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
+    el.startBtn.addEventListener("click", () => {
+      resetAll();
+      showTab("flow");
+    });
+    el.flowCloseBtn.addEventListener("click", () => showTab("home"));
+    el.restartBtn.addEventListener("click", () => {
+      resetAll();
+      showTab("home");
+    });
+  }
+
+  /* ==========================================================
    * 初期化
    * ========================================================== */
   function init() {
@@ -1431,7 +1803,8 @@
     initShortSteps();
     initPhoto();
     initQuiz();
-    el.restartBtn.addEventListener("click", resetAll);
+    initRecord();
+    initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");
       el.reloadBtn.addEventListener("click", hardReload);
@@ -1439,6 +1812,7 @@
     }
     renderStats();
     showScreen(1);
+    showTab("home");
     initCloud();
   }
 

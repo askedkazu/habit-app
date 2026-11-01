@@ -9,7 +9,7 @@
   <!-- ホーム画面に追加したときのアプリ情報とアイコン（通知を受け取るのに必要） -->
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <meta name="theme-color" content="#4f46e5" />
+  <meta name="theme-color" content="#ffffff" />
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -18,44 +18,271 @@
    Tailwind で表現しにくい共通部品・アニメーションを定義
    ========================================================== */
 
+:root {
+  --primary: #1a9cf0;       /* メインの青 */
+  --primary-dark: #0b7fd0;
+  --primary-soft: #e8f5fe;
+  --accent: #ff8a1f;        /* 炎・達成のオレンジ */
+  --done: #22c55e;          /* 正解・達成の緑 */
+  --bg: #f2f4f7;
+  --line: #e5e8ec;
+  --text-sub: #64748b;
+}
+
 body {
   font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* カード */
+.app-bg { background: var(--bg); }
+
+/* ---------- ヘッダー・タブ ---------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  padding: 0 1rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  color: #334155;
+}
+.icon-btn:hover { background: #eef1f4; }
+
+.tab { animation: fadeIn 0.2s ease-out; }
+
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: 100%;
+  max-width: 28rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9aa4b2;
+}
+.tab-btn svg { width: 1.5rem; height: 1.5rem; }
+.tab-btn.active { color: var(--primary); }
+
+.section-title { font-size: 0.95rem; font-weight: 800; color: #1e293b; }
+.link-btn { font-size: 0.8rem; font-weight: 700; color: var(--primary); }
+
+/* ---------- カード ---------- */
 .card {
   background: #fff;
   border-radius: 1rem;
-  padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  padding: 1.1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
-/* ボタン */
+/* ホームの今日のサマリー */
+.hero-card {
+  color: #fff;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, #1a9cf0 0%, #3b6cf6 100%);
+  box-shadow: 0 8px 20px rgba(26, 156, 240, 0.28);
+}
+.today-chip {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+.today-chip.done { background: #fff; color: var(--primary-dark); }
+
+/* 今週の達成（月〜日） */
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  text-align: center;
+}
+.week-day { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; font-size: 0.68rem; opacity: 0.9; }
+.week-dot {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.18);
+}
+.week-day.done .week-dot { background: #fff; color: var(--accent); }
+.week-day.today .week-dot { box-shadow: 0 0 0 2px #fff; }
+.week-day.future { opacity: 0.5; }
+
+/* 数字カード */
+.stat-card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 0.8rem 0.5rem;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.stat-label { font-size: 0.7rem; font-weight: 700; color: var(--text-sub); }
+.stat-value { font-size: 1.5rem; font-weight: 800; color: #0f172a; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.stat-value small { font-size: 0.75rem; font-weight: 700; margin-left: 0.1rem; color: var(--text-sub); }
+
+/* 進捗バー */
+.progress { height: 0.5rem; background: #edf0f3; border-radius: 9999px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--primary); border-radius: 9999px; transition: width 0.4s ease; }
+
+/* バッジ */
+.badge-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  background: #fff4e6;
+  flex-shrink: 0;
+}
+.badge-tile {
+  background: #fff;
+  border-radius: 0.9rem;
+  padding: 0.7rem 0.25rem 0.6rem;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.badge-tile .badge-icon { margin: 0 auto 0.35rem; width: 2.6rem; height: 2.6rem; font-size: 1.35rem; }
+.badge-tile p { font-size: 0.65rem; font-weight: 700; color: #334155; line-height: 1.25; }
+.badge-tile.locked .badge-icon { background: #eef1f4; filter: grayscale(1); opacity: 0.45; }
+.badge-tile.locked p { color: #a0a9b6; }
+
+/* 記録（タイムライン） */
+.log-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #fff;
+  border-radius: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.log-date {
+  width: 2.75rem;
+  flex-shrink: 0;
+  text-align: center;
+  line-height: 1.1;
+}
+.log-date b { display: block; font-size: 1.15rem; color: #0f172a; }
+.log-date span { font-size: 0.65rem; color: var(--text-sub); font-weight: 700; }
+.log-score {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  white-space: nowrap;
+}
+.log-score.perfect { background: #fff4e6; color: #c2570c; }
+.empty-note { text-align: center; font-size: 0.85rem; color: #94a3b8; padding: 1.5rem 0; }
+
+/* カレンダー */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; text-align: center; }
+.cal-head span { font-size: 0.7rem; font-weight: 700; color: #94a3b8; padding-bottom: 0.3rem; }
+.cal-head span:first-child { color: #f87171; }
+.cal-head span:last-child { color: #60a5fa; }
+.cal-day {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+}
+.cal-day.done { background: var(--primary); color: #fff; }
+.cal-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-day.future { color: #cbd5e1; }
+
+/* 完了画面 */
+.done-card {
+  color: #fff;
+  border-radius: 1.25rem;
+  padding: 1.6rem 1rem 1.4rem;
+  background: linear-gradient(135deg, #ff9a3c 0%, #ff6a3d 100%);
+  box-shadow: 0 10px 24px rgba(255, 122, 45, 0.3);
+}
+.bump { animation: bump 0.5s ease-out; }
+@keyframes bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- ボタン・入力 ---------- */
 .btn-primary {
-  background: #4f46e5;
+  background: var(--primary);
   color: #fff;
   font-weight: 700;
-  border-radius: 0.75rem;
+  border-radius: 0.8rem;
   padding: 0.6rem 1rem;
   transition: background 0.15s, transform 0.1s, opacity 0.15s;
 }
-.btn-primary:hover:not(:disabled) { background: #4338ca; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
 .btn-primary:active:not(:disabled) { transform: scale(0.98); }
-.btn-primary:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
+.btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; }
+.btn-cta {
+  padding: 1rem;
+  font-size: 1.05rem;
+  border-radius: 1rem;
+  box-shadow: 0 6px 16px rgba(26, 156, 240, 0.3);
 }
 
 .btn-ghost {
-  background: #f1f5f9;
+  background: #eef1f4;
   color: #334155;
   font-weight: 600;
-  border-radius: 0.75rem;
+  border-radius: 0.8rem;
   padding: 0.5rem 0.9rem;
   transition: background 0.15s;
 }
-.btn-ghost:hover { background: #e2e8f0; }
+.btn-ghost:hover { background: #e2e6eb; }
+
+.input {
+  border: 1px solid #d5dbe2;
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: #fff;
+}
+.input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26, 156, 240, 0.2); }
 
 /* ショートステップの項目 */
 .step-item {
@@ -63,21 +290,29 @@ body {
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 0.75rem;
+  border: 2px solid var(--line);
+  border-radius: 0.8rem;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
   user-select: none;
 }
-.step-item:has(input:checked) {
-  border-color: #10b981;
-  background: #ecfdf5;
-}
-.step-item input {
-  width: 1.35rem;
-  height: 1.35rem;
-  accent-color: #10b981;
-  flex-shrink: 0;
+.step-item:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.step-item input { width: 1.35rem; height: 1.35rem; accent-color: var(--primary); flex-shrink: 0; }
+
+/* 写真の枠 */
+.photo-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 14rem;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px dashed #9fd4f8;
+  border-radius: 0.9rem;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* 進捗ステッパー */
@@ -99,62 +334,51 @@ body {
   background: #e2e8f0;
   color: #64748b;
 }
-.step.active { color: #4f46e5; font-weight: 700; }
-.step.active span { background: #4f46e5; color: #fff; }
-.step.done span { background: #10b981; color: #fff; }
-.step-line {
-  flex: 1;
-  height: 2px;
-  background: #e2e8f0;
-  margin: 0 0.25rem 1.1rem;
-}
+.step.active { color: var(--primary); font-weight: 700; }
+.step.active span { background: var(--primary); color: #fff; }
+.step.done span { background: var(--done); color: #fff; }
+.step-line { flex: 1; height: 2px; background: #e2e8f0; margin: 0 0.25rem 1.1rem; }
 
 /* クイズの選択肢 */
 .choice-btn {
   width: 100%;
   text-align: left;
   padding: 0.85rem 1rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 0.75rem;
+  border: 2px solid var(--line);
+  border-radius: 0.8rem;
   background: #fff;
   transition: border-color 0.15s, background 0.15s;
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
 }
-.choice-btn:hover:not(:disabled) { border-color: #a5b4fc; background: #eef2ff; }
-.choice-btn .label {
-  font-weight: 700;
-  color: #6366f1;
-  flex-shrink: 0;
-}
-.choice-btn.correct { border-color: #10b981; background: #ecfdf5; }
-.choice-btn.wrong   { border-color: #f43f5e; background: #fff1f2; }
+.choice-btn:hover:not(:disabled) { border-color: #9fd4f8; background: var(--primary-soft); }
+.choice-btn .label { font-weight: 800; color: var(--primary); flex-shrink: 0; }
+.choice-btn.correct { border-color: var(--done); background: #ecfdf3; }
+.choice-btn.wrong { border-color: #f43f5e; background: #fff1f2; }
 .choice-btn:disabled { cursor: default; }
 
-/* 画面切替のフェードイン */
+/* ---------- アニメーション ---------- */
 .screen { animation: fadeIn 0.25s ease-out; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+  to { opacity: 1; transform: none; }
 }
 
-/* ローディングスピナー */
 .spinner {
   width: 1.4rem;
   height: 1.4rem;
-  border: 3px solid #c7d2fe;
-  border-top-color: #4f46e5;
+  border: 3px solid #bfe3fb;
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 完了時のアイコン */
 .celebrate { animation: pop 0.6s ease-out; }
 @keyframes pop {
-  0%   { transform: scale(0.3); opacity: 0; }
-  60%  { transform: scale(1.2); opacity: 1; }
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(1); }
 }
 
@@ -179,7 +403,7 @@ body {
   z-index: 50;
   padding: 0.4rem 0.9rem;
   border-radius: 9999px;
-  background: #4f46e5;
+  background: var(--primary);
   color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
@@ -204,208 +428,337 @@ body {
 
 </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
-  <div class="max-w-md mx-auto px-4 pb-16">
+<body class="app-bg text-slate-800 min-h-screen">
+  <div class="max-w-md mx-auto min-h-screen relative">
 
-    <!-- ===== ヘッダー ===== -->
-    <header class="flex items-center justify-between py-4">
-      <div>
-        <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
-        <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
-      </div>
-      <div class="flex items-center gap-1">
+    <!-- ===== ヘッダー（タブごとにタイトルが変わる） ===== -->
+    <header class="app-header">
+      <button id="flowCloseBtn" class="hidden icon-btn" aria-label="閉じる">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <h1 id="headerTitle" class="text-base font-bold flex-1">ホーム</h1>
       <!-- ホーム画面から開いた（ブラウザの再読み込みボタンがない）ときだけ表示 -->
-      <button id="reloadBtn" class="hidden p-2 rounded-full hover:bg-slate-200" aria-label="再読み込み">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <button id="reloadBtn" class="hidden icon-btn" aria-label="再読み込み">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.1 15a7 7 0 0 0 12.9 1.9M18.9 9A7 7 0 0 0 6 7.1"/>
         </svg>
       </button>
-      <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      </button>
-      </div>
     </header>
 
     <!-- 引っぱって更新のインジケーター -->
     <div id="pullIndicator" class="pull-indicator" aria-hidden="true">↓ 離すと再読み込み</div>
 
-    <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
-    <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
-      <img id="accountAvatar" class="hidden w-9 h-9 rounded-full" alt="" referrerpolicy="no-referrer" />
-      <div class="flex-1 min-w-0">
-        <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
-        <p id="accountStatus" class="text-xs text-slate-500 truncate">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
-      </div>
-      <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
-      <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
-    </section>
+    <!-- =====================================================
+         タブ：ホーム
+         ===================================================== -->
+    <main id="tabHome" class="tab px-4 pb-28 pt-3">
 
-    <!-- ===== 設定パネル（APIキー） ===== -->
-    <section id="settingsPanel" class="hidden card mb-4">
-      <h2 class="font-bold mb-2">設定</h2>
-      <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
-      <div class="flex gap-2">
-        <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off"
-               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
-      </div>
-      <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
-      <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
-      <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false"
-             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      <datalist id="modelOptions">
-        <option value="gemini-3.8-flash">推奨</option>
-      </datalist>
-      <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
-      <div class="flex gap-2 mt-3">
-        <button id="saveApiKey" class="btn-primary flex-1">保存</button>
-        <button id="clearApiKey" class="btn-ghost">削除</button>
-      </div>
-      <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
-      <p class="text-xs text-slate-400 mt-2">
-        ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
-        キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
-      </p>
-    </section>
-
-    <!-- ===== リマインド通知（ログイン中かつ通知の設定があるときだけ表示） ===== -->
-    <section id="notifyCard" class="hidden card mb-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <p class="text-sm font-bold">🔔 リマインド通知</p>
-          <p id="notifyStatus" class="text-xs text-slate-500">毎日決まった時刻にお知らせします（その日達成済みなら送りません）</p>
+      <!-- 今日のサマリー -->
+      <section class="hero-card">
+        <div class="flex items-start justify-between">
+          <div>
+            <p id="homeDate" class="text-sm opacity-90"></p>
+            <p id="homeGreeting" class="text-lg font-bold mt-0.5"></p>
+          </div>
+          <span id="todayChip" class="today-chip">まだ</span>
         </div>
-        <input id="notifyTime" type="time" value="20:00" step="300"
-               class="border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      </div>
-      <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
-      <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
-    </section>
 
-    <!-- ===== 達成状況 ===== -->
-    <section class="card mb-4 flex items-center justify-around text-center">
-      <div>
-        <p class="text-2xl font-bold text-indigo-600" id="streakCount">0</p>
-        <p class="text-xs text-slate-500">連続日数</p>
-      </div>
-      <div class="w-px h-10 bg-slate-200"></div>
-      <div>
-        <p class="text-2xl font-bold text-emerald-600" id="totalCount">0</p>
-        <p class="text-xs text-slate-500">累計達成</p>
-      </div>
-      <div class="w-px h-10 bg-slate-200"></div>
-      <div>
-        <p class="text-2xl" id="todayBadge">—</p>
-        <p class="text-xs text-slate-500">今日</p>
-      </div>
-    </section>
-
-    <!-- ===== 進捗インジケータ ===== -->
-    <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
-      <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
-      <li class="step-line"></li>
-      <li class="step" data-step="2"><span>2</span>証拠写真</li>
-      <li class="step-line"></li>
-      <li class="step" data-step="3"><span>3</span>確認テスト</li>
-    </ol>
-
-    <!-- ===== STEP 1: ショートステップ ===== -->
-    <section id="step1" class="card screen">
-      <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
-      <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
-
-      <ul id="shortStepList" class="space-y-2"></ul>
-
-      <!-- 自分だけのステップ追加 -->
-      <form id="addStepForm" class="flex gap-2 mt-3">
-        <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）"
-               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <button class="btn-ghost text-sm" type="submit">追加</button>
-      </form>
-
-      <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
-        達成！ 次へ進む
-      </button>
-    </section>
-
-    <!-- ===== STEP 2: 証拠写真アップロード ===== -->
-    <section id="step2" class="card screen hidden">
-      <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
-      <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
-
-      <!-- プレビュー枠（タップするとアルバムから選択） -->
-      <label for="photoInput" id="photoDropzone"
-             class="flex flex-col items-center justify-center border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-xl h-56 cursor-pointer overflow-hidden relative">
-        <div id="photoPlaceholder" class="text-center text-indigo-500">
-          <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
-            <circle cx="12" cy="13" r="3"/>
-          </svg>
-          <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
+        <div class="flex items-end gap-2 mt-4">
+          <span class="text-4xl leading-none">🔥</span>
+          <span id="streakCount" class="text-5xl font-extrabold leading-none tabular-nums">0</span>
+          <span class="text-base font-bold mb-1">日連続</span>
         </div>
-        <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
-      </label>
 
-      <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
-      <div class="grid grid-cols-2 gap-2 mt-3">
-        <label for="cameraInput" class="btn-ghost text-sm text-center cursor-pointer py-3">📷 カメラで撮る</label>
-        <label for="photoInput" class="btn-ghost text-sm text-center cursor-pointer py-3">🖼️ アルバムから選ぶ</label>
-      </div>
-      <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
-      <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
-      <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
+        <!-- 今週の達成（月〜日） -->
+        <ol id="weekRow" class="week-row mt-5"></ol>
+      </section>
 
-      <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
-        写真を送信して問題生成
-      </button>
-      <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
-        デモ問題で試す（AIを使わない）
+      <!-- 今日を始める -->
+      <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
+        今日のちょいステップを始める
       </button>
 
-      <!-- ローディング表示 -->
-      <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-indigo-600">
-        <div class="spinner"></div>
-        <span id="loadingText" class="text-sm">AIが問題を作成中…</span>
-      </div>
-      <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+      <!-- ログインのおすすめ（ログイン機能があって未ログインのとき） -->
+      <section id="homeLoginNudge" class="hidden card mt-4 flex items-center gap-3">
+        <div class="text-2xl">🔑</div>
+        <p class="flex-1 text-sm text-slate-600">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
+        <button id="homeLoginBtn" class="btn-primary text-sm whitespace-nowrap">ログイン</button>
+      </section>
 
-      <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
-    </section>
+      <!-- 数字 -->
+      <section class="grid grid-cols-3 gap-3 mt-4">
+        <div class="stat-card">
+          <p class="stat-label">累計</p>
+          <p class="stat-value"><span id="totalCount">0</span><small>日</small></p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">今月</p>
+          <p class="stat-value"><span id="monthCount">0</span><small>日</small></p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">ベスト</p>
+          <p class="stat-value"><span id="bestStreak">0</span><small>日</small></p>
+        </div>
+      </section>
 
-    <!-- ===== STEP 3: 確認テスト ===== -->
-    <section id="step3" class="card screen hidden">
-      <div class="flex items-center justify-between mb-2">
-        <span id="quizProgress" class="text-sm font-medium text-indigo-600">Q1 / 3</span>
-        <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
-      </div>
-      <div class="h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
-        <div id="quizBar" class="h-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
-      </div>
+      <!-- 次のバッジまで -->
+      <section id="nextBadgeCard" class="card mt-4">
+        <div class="flex items-center gap-3">
+          <div id="nextBadgeIcon" class="badge-icon">🥉</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs text-slate-500">次のバッジまで</p>
+            <p id="nextBadgeText" class="text-sm font-bold truncate"></p>
+            <div class="progress mt-2"><div id="nextBadgeBar" class="progress-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </section>
 
-      <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
-      <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
-      <div id="quizChoices" class="space-y-2"></div>
+      <!-- 最近の記録 -->
+      <section class="mt-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="section-title">最近の記録</h2>
+          <button class="link-btn" data-goto="record">すべて見る</button>
+        </div>
+        <ul id="recentLogs" class="space-y-2"></ul>
+      </section>
+    </main>
 
-      <!-- 採点結果（正解/不正解＋解説） -->
-      <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+    <!-- =====================================================
+         タブ：記録
+         ===================================================== -->
+    <main id="tabRecord" class="tab hidden px-4 pb-28 pt-3">
 
-      <!-- 問題の作成にかかった時間（遅いときの原因調査用） -->
-      <p id="quizTiming" class="text-xs text-slate-400 mt-4"></p>
+      <!-- カレンダー -->
+      <section class="card">
+        <div class="flex items-center justify-between mb-3">
+          <button id="calPrev" class="icon-btn" aria-label="前の月">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div class="text-center">
+            <p id="calTitle" class="font-bold"></p>
+            <p id="calSummary" class="text-xs text-slate-500"></p>
+          </div>
+          <button id="calNext" class="icon-btn" aria-label="次の月">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="cal-grid cal-head"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+        <div id="calGrid" class="cal-grid"></div>
+      </section>
 
-      <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
-    </section>
+      <!-- バッジ -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">バッジ</h2>
+        <div id="badgeGrid" class="grid grid-cols-4 gap-2"></div>
+      </section>
 
-    <!-- ===== 完了画面 ===== -->
-    <section id="stepDone" class="card screen hidden text-center">
-      <div class="text-6xl mb-3 celebrate">🎉</div>
-      <h2 class="text-2xl font-bold text-indigo-600 mb-2">テストクリア！習慣達成！</h2>
-      <p id="doneScore" class="text-slate-600 mb-1"></p>
-      <p id="doneMessage" class="text-sm text-slate-500 mb-6"></p>
-      <button id="restartBtn" class="btn-primary w-full py-3">もう一度チャレンジ</button>
-    </section>
+      <!-- タイムライン -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">これまでの記録</h2>
+        <ul id="allLogs" class="space-y-2"></ul>
+      </section>
+    </main>
+
+    <!-- =====================================================
+         タブ：設定
+         ===================================================== -->
+    <main id="tabSettings" class="tab hidden px-4 pb-28 pt-3 space-y-4">
+
+      <!-- アカウント（Firebase 設定済みのときだけ表示） -->
+      <section id="accountBar" class="hidden card flex items-center gap-3">
+        <img id="accountAvatar" class="hidden w-10 h-10 rounded-full" alt="" referrerpolicy="no-referrer" />
+        <div class="flex-1 min-w-0">
+          <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
+          <p id="accountStatus" class="text-xs text-slate-500">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
+        </div>
+        <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
+        <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
+      </section>
+
+      <!-- リマインド通知（ログイン中かつ通知の設定があるときだけ表示） -->
+      <section id="notifyCard" class="hidden card">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-bold">🔔 リマインド通知</p>
+            <p id="notifyStatus" class="text-xs text-slate-500">毎日決まった時刻にお知らせします（その日達成済みなら送りません）</p>
+          </div>
+          <input id="notifyTime" type="time" value="20:00" step="300" class="input w-auto px-2 py-1" />
+        </div>
+        <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
+        <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
+      </section>
+
+      <!-- 自分で追加したステップ -->
+      <section class="card">
+        <p class="text-sm font-bold">✏️ 自分で追加したステップ</p>
+        <p class="text-xs text-slate-500 mb-2">ステップは、始めるときの画面から追加できます</p>
+        <ul id="customStepList" class="divide-y divide-slate-100"></ul>
+      </section>
+
+      <!-- APIキー（Firebase 経由でAIを使えないときだけ表示） -->
+      <section id="settingsPanel" class="card">
+        <p class="text-sm font-bold mb-2">🤖 AIの設定</p>
+        <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
+        <div class="flex gap-2">
+          <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off" class="input flex-1 min-w-0" />
+          <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
+        </div>
+        <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
+        <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
+        <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false" class="input w-full" />
+        <datalist id="modelOptions">
+          <option value="gemini-3.8-flash">推奨</option>
+        </datalist>
+        <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
+        <div class="flex gap-2 mt-3">
+          <button id="saveApiKey" class="btn-primary flex-1">保存</button>
+          <button id="clearApiKey" class="btn-ghost">削除</button>
+        </div>
+        <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
+        <p class="text-xs text-slate-400 mt-2">
+          ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
+          キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
+        </p>
+      </section>
+
+      <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
+    </main>
+
+    <!-- =====================================================
+         記録の流れ（ちょいステップ → 写真 → テスト → 達成）
+         ===================================================== -->
+    <main id="tabFlow" class="tab hidden px-4 pb-10 pt-3">
+
+      <!-- 進捗インジケータ -->
+      <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
+        <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="2"><span>2</span>証拠写真</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="3"><span>3</span>確認テスト</li>
+      </ol>
+
+      <!-- STEP 1: ショートステップ -->
+      <section id="step1" class="card screen">
+        <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
+        <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
+
+        <ul id="shortStepList" class="space-y-2"></ul>
+
+        <!-- 自分だけのステップ追加 -->
+        <form id="addStepForm" class="flex gap-2 mt-3">
+          <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）" class="input flex-1 min-w-0" />
+          <button class="btn-ghost text-sm" type="submit">追加</button>
+        </form>
+
+        <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+          達成！ 次へ進む
+        </button>
+      </section>
+
+      <!-- STEP 2: 証拠写真アップロード -->
+      <section id="step2" class="card screen hidden">
+        <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
+        <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
+
+        <!-- プレビュー枠（タップするとアルバムから選択） -->
+        <label for="photoInput" id="photoDropzone" class="photo-drop">
+          <div id="photoPlaceholder" class="text-center">
+            <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+              <circle cx="12" cy="13" r="3"/>
+            </svg>
+            <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
+          </div>
+          <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
+        </label>
+
+        <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <label for="cameraInput" class="btn-ghost text-sm text-center cursor-pointer py-3">📷 カメラで撮る</label>
+          <label for="photoInput" class="btn-ghost text-sm text-center cursor-pointer py-3">🖼️ アルバムから選ぶ</label>
+        </div>
+        <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
+        <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
+
+        <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+          写真を送信して問題生成
+        </button>
+        <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
+          デモ問題で試す（AIを使わない）
+        </button>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-sky-600">
+          <div class="spinner"></div>
+          <span id="loadingText" class="text-sm">AIが問題を作成中…</span>
+        </div>
+        <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+      </section>
+
+      <!-- STEP 3: 確認テスト -->
+      <section id="step3" class="card screen hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span id="quizProgress" class="text-sm font-bold text-sky-600">Q1 / 3</span>
+          <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
+        </div>
+        <div class="progress mb-4"><div id="quizBar" class="progress-bar" style="width:0%"></div></div>
+
+        <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
+        <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
+        <div id="quizChoices" class="space-y-2"></div>
+
+        <!-- 採点結果（正解/不正解＋解説） -->
+        <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+
+        <!-- 問題の作成にかかった時間（遅いときの原因調査用） -->
+        <p id="quizTiming" class="text-xs text-slate-400 mt-4"></p>
+
+        <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
+      </section>
+
+      <!-- 完了画面 -->
+      <section id="stepDone" class="screen hidden text-center">
+        <div class="done-card">
+          <p class="text-sm font-bold opacity-90">テストクリア！習慣達成！</p>
+          <div class="flex items-end justify-center gap-2 mt-3">
+            <span class="text-5xl leading-none celebrate">🔥</span>
+            <span id="doneStreak" class="text-6xl font-extrabold leading-none tabular-nums">0</span>
+            <span class="text-lg font-bold mb-1">日連続</span>
+          </div>
+          <p id="doneStreakNote" class="text-sm mt-2 opacity-90"></p>
+        </div>
+
+        <!-- 新しく獲得したバッジ -->
+        <div id="newBadges" class="hidden card mt-4"></div>
+
+        <div class="card mt-4">
+          <p id="doneScore" class="font-bold text-slate-700"></p>
+          <p id="doneMessage" class="text-sm text-slate-500 mt-1"></p>
+        </div>
+
+        <button id="restartBtn" class="btn-primary btn-cta w-full mt-5">ホームに戻る</button>
+      </section>
+    </main>
+
+    <!-- ===== 下のタブバー ===== -->
+    <nav id="tabBar" class="tab-bar">
+      <button class="tab-btn" data-tab="home">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>ホーム</span>
+      </button>
+      <button class="tab-btn" data-tab="record">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path stroke-linecap="round" d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>
+        <span>記録</span>
+      </button>
+      <button class="tab-btn" data-tab="settings">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+        <span>設定</span>
+      </button>
+    </nav>
   </div>
 
   <!-- 紙吹雪用レイヤー -->
@@ -480,6 +833,7 @@ window.FIREBASE_VAPID_KEY =
     model: "habitApp.geminiModel",
     customSteps: "habitApp.customSteps",
     history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
+    logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
   };
 
   // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
@@ -537,7 +891,6 @@ window.FIREBASE_VAPID_KEY =
 
   const el = {
     // 設定
-    settingsToggle: $("settingsToggle"),
     settingsPanel: $("settingsPanel"),
     apiKeyInput: $("apiKeyInput"),
     toggleKeyVisibility: $("toggleKeyVisibility"),
@@ -555,8 +908,35 @@ window.FIREBASE_VAPID_KEY =
     // 達成状況
     streakCount: $("streakCount"),
     totalCount: $("totalCount"),
-    todayBadge: $("todayBadge"),
     stepper: $("stepper"),
+    // タブ・ヘッダー
+    headerTitle: $("headerTitle"),
+    flowCloseBtn: $("flowCloseBtn"),
+    tabBar: $("tabBar"),
+    // ホーム
+    startBtn: $("startBtn"),
+    homeDate: $("homeDate"),
+    homeGreeting: $("homeGreeting"),
+    todayChip: $("todayChip"),
+    weekRow: $("weekRow"),
+    monthCount: $("monthCount"),
+    bestStreak: $("bestStreak"),
+    nextBadgeIcon: $("nextBadgeIcon"),
+    nextBadgeText: $("nextBadgeText"),
+    nextBadgeBar: $("nextBadgeBar"),
+    recentLogs: $("recentLogs"),
+    homeLoginNudge: $("homeLoginNudge"),
+    homeLoginBtn: $("homeLoginBtn"),
+    // 記録
+    calPrev: $("calPrev"),
+    calNext: $("calNext"),
+    calTitle: $("calTitle"),
+    calSummary: $("calSummary"),
+    calGrid: $("calGrid"),
+    badgeGrid: $("badgeGrid"),
+    allLogs: $("allLogs"),
+    // 設定
+    customStepList: $("customStepList"),
     // STEP1
     shortStepList: $("shortStepList"),
     addStepForm: $("addStepForm"),
@@ -594,6 +974,9 @@ window.FIREBASE_VAPID_KEY =
     // 完了
     doneScore: $("doneScore"),
     doneMessage: $("doneMessage"),
+    doneStreak: $("doneStreak"),
+    doneStreakNote: $("doneStreakNote"),
+    newBadges: $("newBadges"),
     restartBtn: $("restartBtn"),
     confetti: $("confetti"),
   };
@@ -684,17 +1067,8 @@ window.FIREBASE_VAPID_KEY =
     el.modelSelect.value = getModel();
     updateApiKeyStatus();
 
-    // Firebase 経由でAIを使える場合、利用者はAPIキーを設定しなくてよいので設定ボタンごと隠す
-    if (canUseFirebaseAI()) {
-      el.settingsToggle.classList.add("hidden");
-    } else if (!savedKey) {
-      // APIキー未設定なら最初から設定パネルを開いておく
-      el.settingsPanel.classList.remove("hidden");
-    }
-
-    el.settingsToggle.addEventListener("click", () => {
-      el.settingsPanel.classList.toggle("hidden");
-    });
+    // Firebase 経由でAIを使える場合、利用者はAPIキーを設定しなくてよいので設定欄ごと隠す
+    el.settingsPanel.classList.toggle("hidden", canUseFirebaseAI());
 
     el.toggleKeyVisibility.addEventListener("click", () => {
       const isPw = el.apiKeyInput.type === "password";
@@ -711,7 +1085,6 @@ window.FIREBASE_VAPID_KEY =
       storage.set(STORAGE_KEYS.apiKey, key);
       saveModel();
       updateApiKeyStatus("保存しました ✅");
-      setTimeout(() => el.settingsPanel.classList.add("hidden"), 600);
     });
 
     el.clearApiKey.addEventListener("click", () => {
@@ -776,6 +1149,7 @@ window.FIREBASE_VAPID_KEY =
 
     el.accountBar.classList.remove("hidden");
     el.loginBtn.addEventListener("click", login);
+    el.homeLoginBtn.addEventListener("click", login);
     el.logoutBtn.addEventListener("click", logout);
 
     // Googleログインはファイルを直接開いた状態（file://）では使えない
@@ -884,6 +1258,8 @@ window.FIREBASE_VAPID_KEY =
     el.accountName.textContent = user ? user.displayName || user.email || "ログイン中" : "ログインしていません";
     el.accountStatus.textContent =
       statusMsg || (user ? "記録はアカウントに保存されています" : "ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます");
+    // ホームでもログインをすすめる（ログインできる環境で未ログインのとき）
+    el.homeLoginNudge.classList.toggle("hidden", !!user || !cloud.auth);
   }
 
   function userDocRef() {
@@ -902,6 +1278,7 @@ window.FIREBASE_VAPID_KEY =
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
+        writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
       } else {
         // 初めてのログイン：この端末の記録をアカウントに引き継ぐ
@@ -930,6 +1307,9 @@ window.FIREBASE_VAPID_KEY =
     // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
     const history = getHistory();
     if (history.length) data.history = arrayUnion(...history);
+    // 記録も同じく追加していく（同じ内容の記録は Firestore 側で重複しない）
+    const logs = getLogs();
+    if (logs.length) data.logs = arrayUnion(...logs);
     try {
       await setDoc(userDocRef(), data, { merge: true });
       setAccountUI(cloud.user);
@@ -1159,11 +1539,233 @@ window.FIREBASE_VAPID_KEY =
     return streak;
   }
 
+  // これまでで一番長く続いた連続日数
+  function calcBestStreak(history) {
+    const days = [...new Set(history)].sort().map(parseDateKey);
+    let best = 0;
+    let run = 0;
+    days.forEach((d, i) => {
+      const prev = days[i - 1];
+      run = prev && Math.round((d - prev) / 86400000) === 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+    });
+    return best;
+  }
+
+  // "YYYY-MM-DD" → その日の0時（ローカル時刻）
+  function parseDateKey(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+  /* ---------- 記録（タイムライン用） ---------- */
+  function getLogs() {
+    return storage.getJSON(STORAGE_KEYS.logs, []);
+  }
+
+  function sortLogs(logs) {
+    return [...logs].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  }
+
+  function addLog(log) {
+    const logs = sortLogs([...getLogs(), log]).slice(-365); // 端末には直近365件まで
+    storage.setJSON(STORAGE_KEYS.logs, logs);
+  }
+
+  /* ---------- バッジ ---------- */
+  // type: "streak" は自己ベストの連続日数、"total" は累計達成日数で判定する
+  const BADGES = [
+    { id: "first", icon: "🌱", name: "はじめの一歩", type: "total", goal: 1 },
+    { id: "streak3", icon: "🥉", name: "3日連続", type: "streak", goal: 3 },
+    { id: "streak7", icon: "🥈", name: "7日連続", type: "streak", goal: 7 },
+    { id: "total10", icon: "📘", name: "累計10日", type: "total", goal: 10 },
+    { id: "streak14", icon: "🥇", name: "14日連続", type: "streak", goal: 14 },
+    { id: "streak30", icon: "🏆", name: "30日連続", type: "streak", goal: 30 },
+    { id: "total50", icon: "📚", name: "累計50日", type: "total", goal: 50 },
+    { id: "total100", icon: "👑", name: "累計100日", type: "total", goal: 100 },
+  ];
+
+  function badgeProgress(badge, history) {
+    const value = badge.type === "streak" ? calcBestStreak(history) : new Set(history).size;
+    return { value: Math.min(value, badge.goal), earned: value >= badge.goal };
+  }
+
+  function earnedBadgeIds(history) {
+    return BADGES.filter((b) => badgeProgress(b, history).earned).map((b) => b.id);
+  }
+
+  function badgeTile(badge, locked) {
+    const div = document.createElement("div");
+    div.className = `badge-tile${locked ? " locked" : ""}`;
+    const icon = document.createElement("div");
+    icon.className = "badge-icon";
+    icon.textContent = badge.icon;
+    const name = document.createElement("p");
+    name.textContent = badge.name;
+    div.append(icon, name);
+    return div;
+  }
+
+  /* ---------- 画面の描画 ---------- */
   function renderStats() {
+    renderHome();
+    renderRecord();
+  }
+
+  function renderHome() {
     const history = getHistory();
+    const set = new Set(history);
+    const now = new Date();
+    const doneToday = set.has(dateKey(now));
+
+    el.homeDate.textContent = `${now.getMonth() + 1}月${now.getDate()}日（${WEEKDAYS[now.getDay()]}）`;
+    const hour = now.getHours();
+    el.homeGreeting.textContent = doneToday
+      ? "今日もよくがんばりました！"
+      : hour < 11 ? "おはよう！今日も一歩だけ" : hour < 17 ? "こんにちは！今日の一歩はまだ？" : "こんばんは！5分だけやってみよう";
+    el.todayChip.textContent = doneToday ? "今日は達成 ✓" : "今日はまだ";
+    el.todayChip.classList.toggle("done", doneToday);
     el.streakCount.textContent = calcStreak(history);
-    el.totalCount.textContent = history.length;
-    el.todayBadge.textContent = history.includes(dateKey()) ? "✅" : "—";
+    el.startBtn.textContent = doneToday ? "もう一度チャレンジする" : "今日のちょいステップを始める";
+
+    // 今週（月曜はじまり）の達成
+    el.weekRow.innerHTML = "";
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const key = dateKey(d);
+      const li = document.createElement("li");
+      li.className = "week-day";
+      if (set.has(key)) li.classList.add("done");
+      if (key === dateKey(now)) li.classList.add("today");
+      if (d > now) li.classList.add("future");
+      const dot = document.createElement("span");
+      dot.className = "week-dot";
+      dot.textContent = set.has(key) ? "🔥" : String(d.getDate());
+      const label = document.createElement("span");
+      label.textContent = WEEKDAYS[d.getDay()];
+      li.append(dot, label);
+      el.weekRow.append(li);
+    }
+
+    // 数字
+    const monthPrefix = dateKey(now).slice(0, 7);
+    el.totalCount.textContent = set.size;
+    el.monthCount.textContent = [...set].filter((k) => k.startsWith(monthPrefix)).length;
+    el.bestStreak.textContent = calcBestStreak(history);
+
+    // 次のバッジ（残り日数が一番少ないもの）
+    const next = BADGES.map((b) => ({ b, ...badgeProgress(b, history) }))
+      .filter((x) => !x.earned)
+      .sort((x, y) => x.b.goal - x.value - (y.b.goal - y.value))[0];
+    if (next) {
+      el.nextBadgeIcon.textContent = next.b.icon;
+      el.nextBadgeText.textContent = `${next.b.name} まで あと${next.b.goal - next.value}日`;
+      el.nextBadgeBar.style.width = `${(next.value / next.b.goal) * 100}%`;
+    } else {
+      el.nextBadgeIcon.textContent = "👑";
+      el.nextBadgeText.textContent = "すべてのバッジを獲得しました！";
+      el.nextBadgeBar.style.width = "100%";
+    }
+
+    renderLogList(el.recentLogs, getLogs().reverse().slice(0, 3));
+  }
+
+  // 記録の一覧（新しい順）を描画する
+  function renderLogList(container, logs) {
+    container.innerHTML = "";
+    if (logs.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty-note";
+      li.textContent = "まだ記録がありません。今日の一歩から始めよう！";
+      container.append(li);
+      return;
+    }
+    logs.forEach((log) => {
+      const d = parseDateKey(log.date);
+      const time = log.ts ? new Date(log.ts) : null;
+      const li = document.createElement("li");
+      li.className = "log-item";
+
+      const date = document.createElement("div");
+      date.className = "log-date";
+      const day = document.createElement("b");
+      day.textContent = d.getDate();
+      const md = document.createElement("span");
+      md.textContent = `${d.getMonth() + 1}月(${WEEKDAYS[d.getDay()]})`;
+      date.append(day, md);
+
+      const body = document.createElement("div");
+      body.className = "flex-1 min-w-0";
+      const topic = document.createElement("p");
+      topic.className = "text-sm font-bold truncate";
+      topic.textContent = log.topic || "ちょいステップ達成";
+      const sub = document.createElement("p");
+      sub.className = "text-xs text-slate-500";
+      const parts = [];
+      if (log.steps) parts.push(`ステップ ${log.steps}個`);
+      if (time) parts.push(`${time.getHours()}:${String(time.getMinutes()).padStart(2, "0")}`);
+      sub.textContent = parts.join(" ・ ");
+      body.append(topic, sub);
+
+      li.append(date, body);
+      if (log.total) {
+        const score = document.createElement("span");
+        score.className = `log-score${log.correct === log.total ? " perfect" : ""}`;
+        score.textContent = `${log.correct}/${log.total}問`;
+        li.append(score);
+      }
+      container.append(li);
+    });
+  }
+
+  // 記録タブ：カレンダー・バッジ・タイムライン
+  function renderRecord() {
+    const history = getHistory();
+    const set = new Set(history);
+    const now = new Date();
+    const month = state.calMonth || new Date(now.getFullYear(), now.getMonth(), 1);
+    state.calMonth = month;
+
+    el.calTitle.textContent = `${month.getFullYear()}年${month.getMonth() + 1}月`;
+    const prefix = dateKey(month).slice(0, 7);
+    el.calSummary.textContent = `${[...set].filter((k) => k.startsWith(prefix)).length}日達成`;
+    el.calNext.disabled = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();
+    el.calNext.style.opacity = el.calNext.disabled ? "0.3" : "1";
+
+    el.calGrid.innerHTML = "";
+    for (let i = 0; i < month.getDay(); i++) el.calGrid.append(document.createElement("span"));
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(month.getFullYear(), month.getMonth(), day);
+      const key = dateKey(d);
+      const cell = document.createElement("span");
+      cell.className = "cal-day";
+      if (set.has(key)) cell.classList.add("done");
+      if (key === dateKey(now)) cell.classList.add("today");
+      if (d > now) cell.classList.add("future");
+      cell.textContent = day;
+      el.calGrid.append(cell);
+    }
+
+    el.badgeGrid.innerHTML = "";
+    BADGES.forEach((b) => el.badgeGrid.append(badgeTile(b, !badgeProgress(b, history).earned)));
+
+    renderLogList(el.allLogs, getLogs().reverse());
+  }
+
+  function initRecord() {
+    el.calPrev.addEventListener("click", () => {
+      state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1);
+      renderRecord();
+    });
+    el.calNext.addEventListener("click", () => {
+      if (el.calNext.disabled) return;
+      state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1);
+      renderRecord();
+    });
   }
 
   /* ==========================================================
@@ -1193,6 +1795,38 @@ window.FIREBASE_VAPID_KEY =
       el.shortStepList.append(li);
     });
     updateAchieveButton();
+    renderCustomStepList();
+  }
+
+  // 設定タブ：自分で追加したステップの一覧（削除できる）
+  function renderCustomStepList() {
+    const custom = storage.getJSON(STORAGE_KEYS.customSteps, []);
+    el.customStepList.innerHTML = "";
+    if (custom.length === 0) {
+      const li = document.createElement("li");
+      li.className = "text-sm text-slate-400 py-2";
+      li.textContent = "まだありません";
+      el.customStepList.append(li);
+      return;
+    }
+    custom.forEach((text, i) => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between gap-2 py-2";
+      const span = document.createElement("span");
+      span.className = "text-sm";
+      span.textContent = text;
+      const del = document.createElement("button");
+      del.className = "text-xs font-bold text-rose-500 px-2 py-1";
+      del.textContent = "削除";
+      del.addEventListener("click", () => {
+        const next = storage.getJSON(STORAGE_KEYS.customSteps, []);
+        next.splice(i, 1);
+        storage.setJSON(STORAGE_KEYS.customSteps, next);
+        renderShortSteps();
+      });
+      li.append(span, del);
+      el.customStepList.append(li);
+    });
   }
 
   // 1つでもチェックがあれば達成ボタンを有効化
@@ -1218,7 +1852,10 @@ window.FIREBASE_VAPID_KEY =
       renderShortSteps();
     });
 
-    el.achieveBtn.addEventListener("click", () => showScreen(2));
+    el.achieveBtn.addEventListener("click", () => {
+      state.checkedCount = el.shortStepList.querySelectorAll("input:checked").length;
+      showScreen(2);
+    });
   }
 
   /* ==========================================================
@@ -1268,8 +1905,7 @@ window.FIREBASE_VAPID_KEY =
     const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
 
     if (useFirebase && !cloud.user) {
-      showError("問題を作るには、画面上の「Googleでログイン」からログインしてください。");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      showError("問題を作るには、ホームか設定タブの「ログイン」からログインしてください。");
       return;
     }
     if (useFirebase && !cloud.ai) {
@@ -1277,9 +1913,7 @@ window.FIREBASE_VAPID_KEY =
       return;
     }
     if (!useFirebase && !apiKey) {
-      showError("Gemini APIキーが未設定です。右上の⚙️から設定してください。");
-      el.settingsPanel.classList.remove("hidden");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      showError("Gemini APIキーが未設定です。設定タブの「AIの設定」から入力してください。");
       return;
     }
     if (!state.selectedFile) {
@@ -1529,7 +2163,7 @@ window.FIREBASE_VAPID_KEY =
       }
       if (res.status === 404) {
         throw new Error(
-          `モデル「${model}」は使えません。\n右上の⚙️の「モデル」欄に、下の案内にあるモデル名を入力して保存してください。\n\n${apiMsg}`
+          `モデル「${model}」は使えません。\n設定タブの「モデル」欄に、下の案内にあるモデル名を入力して保存してください。\n\n${apiMsg}`
         );
       }
       throw new Error(`Gemini API エラー (${res.status})\n${apiMsg}`);
@@ -1771,12 +2405,32 @@ window.FIREBASE_VAPID_KEY =
    * 完了画面
    * ========================================================== */
   function finishQuiz() {
+    // 達成前の状態（連続日数の演出と、新しいバッジの判定に使う）
+    const before = getHistory();
+    const doneBefore = before.includes(dateKey());
+    const streakBefore = calcStreak(before);
+    const bestBefore = calcBestStreak(before);
+    const badgesBefore = earnedBadgeIds(before);
+
     // 「超低ハードル」コンセプトのため、全問解き終えたら正答数に関わらず達成扱い
+    const total = state.quiz.questions.length;
+    const c = state.correctCount;
+    addLog({
+      date: dateKey(),
+      ts: Date.now(),
+      topic: state.quiz.topic || "",
+      correct: c,
+      total,
+      steps: state.checkedCount || 0,
+    });
     recordAchievement();
     renderStats();
 
-    const total = state.quiz.questions.length;
-    const c = state.correctCount;
+    const after = getHistory();
+    const streakAfter = calcStreak(after);
+    showDoneStreak({ doneBefore, streakBefore, streakAfter, bestBefore });
+    showNewBadges(earnedBadgeIds(after).filter((id) => !badgesBefore.includes(id)));
+
     el.doneScore.textContent = `${total}問中 ${c}問 正解`;
     el.doneMessage.textContent =
       c === total
@@ -1789,8 +2443,43 @@ window.FIREBASE_VAPID_KEY =
     launchConfetti();
   }
 
+  // 完了画面：連続日数が1つ増える演出
+  function showDoneStreak({ doneBefore, streakBefore, streakAfter, bestBefore }) {
+    el.doneStreak.classList.remove("bump");
+    if (doneBefore) {
+      el.doneStreak.textContent = streakAfter;
+      el.doneStreakNote.textContent = "今日はもう達成済み。復習ナイス！";
+      return;
+    }
+    el.doneStreak.textContent = streakBefore;
+    el.doneStreakNote.textContent =
+      streakAfter === 1
+        ? "今日からスタート！明日も続けよう"
+        : streakAfter > bestBefore
+          ? `自己ベスト更新！ ${streakBefore}日 → ${streakAfter}日`
+          : `${streakBefore}日 → ${streakAfter}日 に伸びました`;
+    setTimeout(() => {
+      el.doneStreak.textContent = streakAfter;
+      el.doneStreak.classList.add("bump");
+    }, 500);
+  }
+
+  // 完了画面：新しく獲得したバッジ
+  function showNewBadges(ids) {
+    el.newBadges.innerHTML = "";
+    el.newBadges.classList.toggle("hidden", ids.length === 0);
+    if (ids.length === 0) return;
+    const title = document.createElement("p");
+    title.className = "font-bold text-slate-700 mb-3";
+    title.textContent = "🎉 新しいバッジを獲得！";
+    const grid = document.createElement("div");
+    grid.className = "flex justify-center gap-2";
+    BADGES.filter((b) => ids.includes(b.id)).forEach((b) => grid.append(badgeTile(b, false)));
+    el.newBadges.append(title, grid);
+  }
+
   function launchConfetti() {
-    const colors = ["#6366f1", "#10b981", "#f59e0b", "#f43f5e", "#0ea5e9"];
+    const colors = ["#1a9cf0", "#22c55e", "#ff8a1f", "#f43f5e", "#facc15"];
     for (let i = 0; i < 60; i++) {
       const p = document.createElement("div");
       p.className = "confetti-piece";
@@ -1882,6 +2571,42 @@ window.FIREBASE_VAPID_KEY =
   }
 
   /* ==========================================================
+   * タブ（ホーム / 記録 / 設定）と記録の流れ
+   * ========================================================== */
+  const TABS = {
+    home: { node: $("tabHome"), title: "ホーム" },
+    record: { node: $("tabRecord"), title: "記録" },
+    settings: { node: $("tabSettings"), title: "設定" },
+    flow: { node: $("tabFlow"), title: "今日のちょいステップ" },
+  };
+
+  function showTab(name) {
+    Object.entries(TABS).forEach(([key, tab]) => tab.node.classList.toggle("hidden", key !== name));
+    el.headerTitle.textContent = TABS[name].title;
+    // 記録の流れの間はタブバーを隠し、左上に「閉じる」を出す
+    const inFlow = name === "flow";
+    el.tabBar.classList.toggle("hidden", inFlow);
+    el.flowCloseBtn.classList.toggle("hidden", !inFlow);
+    el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (name === "record") renderRecord();
+    window.scrollTo({ top: 0 });
+  }
+
+  function initTabs() {
+    el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+    document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
+    el.startBtn.addEventListener("click", () => {
+      resetAll();
+      showTab("flow");
+    });
+    el.flowCloseBtn.addEventListener("click", () => showTab("home"));
+    el.restartBtn.addEventListener("click", () => {
+      resetAll();
+      showTab("home");
+    });
+  }
+
+  /* ==========================================================
    * 初期化
    * ========================================================== */
   function init() {
@@ -1889,7 +2614,8 @@ window.FIREBASE_VAPID_KEY =
     initShortSteps();
     initPhoto();
     initQuiz();
-    el.restartBtn.addEventListener("click", resetAll);
+    initRecord();
+    initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");
       el.reloadBtn.addEventListener("click", hardReload);
@@ -1897,6 +2623,7 @@ window.FIREBASE_VAPID_KEY =
     }
     renderStats();
     showScreen(1);
+    showTab("home");
     initCloud();
   }
 

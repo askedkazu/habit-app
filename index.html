@@ -9,213 +9,342 @@
   <!-- ホーム画面に追加したときのアプリ情報とアイコン（通知を受け取るのに必要） -->
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <meta name="theme-color" content="#4f46e5" />
+  <meta name="theme-color" content="#ffffff" />
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
-  <div class="max-w-md mx-auto px-4 pb-16">
+<body class="app-bg text-slate-800 min-h-screen">
+  <div class="max-w-md mx-auto min-h-screen relative">
 
-    <!-- ===== ヘッダー ===== -->
-    <header class="flex items-center justify-between py-4">
-      <div>
-        <h1 class="text-xl font-bold">ちょいステップ習慣</h1>
-        <p class="text-xs text-slate-500">小さく始めて、写真で証明、AIで確認。</p>
-      </div>
-      <div class="flex items-center gap-1">
+    <!-- ===== ヘッダー（タブごとにタイトルが変わる） ===== -->
+    <header class="app-header">
+      <button id="flowCloseBtn" class="hidden icon-btn" aria-label="閉じる">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <h1 id="headerTitle" class="text-base font-bold flex-1">ホーム</h1>
       <!-- ホーム画面から開いた（ブラウザの再読み込みボタンがない）ときだけ表示 -->
-      <button id="reloadBtn" class="hidden p-2 rounded-full hover:bg-slate-200" aria-label="再読み込み">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <button id="reloadBtn" class="hidden icon-btn" aria-label="再読み込み">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M5.1 15a7 7 0 0 0 12.9 1.9M18.9 9A7 7 0 0 0 6 7.1"/>
         </svg>
       </button>
-      <button id="settingsToggle" class="p-2 rounded-full hover:bg-slate-200" aria-label="設定を開く">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.7.4 1.7 2.9 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.7-2.9 1.7-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.7-.4-1.7-2.9 0-3.4a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      </button>
-      </div>
     </header>
 
     <!-- 引っぱって更新のインジケーター -->
     <div id="pullIndicator" class="pull-indicator" aria-hidden="true">↓ 離すと再読み込み</div>
 
-    <!-- ===== アカウント（Firebase 設定済みのときだけ表示） ===== -->
-    <section id="accountBar" class="hidden card mb-4 flex items-center gap-3">
-      <img id="accountAvatar" class="hidden w-9 h-9 rounded-full" alt="" referrerpolicy="no-referrer" />
-      <div class="flex-1 min-w-0">
-        <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
-        <p id="accountStatus" class="text-xs text-slate-500 truncate">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
-      </div>
-      <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
-      <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
-    </section>
+    <!-- =====================================================
+         タブ：ホーム
+         ===================================================== -->
+    <main id="tabHome" class="tab px-4 pb-28 pt-3">
 
-    <!-- ===== 設定パネル（APIキー） ===== -->
-    <section id="settingsPanel" class="hidden card mb-4">
-      <h2 class="font-bold mb-2">設定</h2>
-      <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
-      <div class="flex gap-2">
-        <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off"
-               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
-      </div>
-      <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
-      <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
-      <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false"
-             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      <datalist id="modelOptions">
-        <option value="gemini-3.8-flash">推奨</option>
-      </datalist>
-      <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
-      <div class="flex gap-2 mt-3">
-        <button id="saveApiKey" class="btn-primary flex-1">保存</button>
-        <button id="clearApiKey" class="btn-ghost">削除</button>
-      </div>
-      <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
-      <p class="text-xs text-slate-400 mt-2">
-        ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
-        キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
-      </p>
-    </section>
-
-    <!-- ===== リマインド通知（ログイン中かつ通知の設定があるときだけ表示） ===== -->
-    <section id="notifyCard" class="hidden card mb-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <p class="text-sm font-bold">🔔 リマインド通知</p>
-          <p id="notifyStatus" class="text-xs text-slate-500">毎日決まった時刻にお知らせします（その日達成済みなら送りません）</p>
+      <!-- 今日のサマリー -->
+      <section class="hero-card">
+        <div class="flex items-start justify-between">
+          <div>
+            <p id="homeDate" class="text-sm opacity-90"></p>
+            <p id="homeGreeting" class="text-lg font-bold mt-0.5"></p>
+          </div>
+          <span id="todayChip" class="today-chip">まだ</span>
         </div>
-        <input id="notifyTime" type="time" value="20:00" step="300"
-               class="border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      </div>
-      <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
-      <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
-    </section>
 
-    <!-- ===== 達成状況 ===== -->
-    <section class="card mb-4 flex items-center justify-around text-center">
-      <div>
-        <p class="text-2xl font-bold text-indigo-600" id="streakCount">0</p>
-        <p class="text-xs text-slate-500">連続日数</p>
-      </div>
-      <div class="w-px h-10 bg-slate-200"></div>
-      <div>
-        <p class="text-2xl font-bold text-emerald-600" id="totalCount">0</p>
-        <p class="text-xs text-slate-500">累計達成</p>
-      </div>
-      <div class="w-px h-10 bg-slate-200"></div>
-      <div>
-        <p class="text-2xl" id="todayBadge">—</p>
-        <p class="text-xs text-slate-500">今日</p>
-      </div>
-    </section>
-
-    <!-- ===== 進捗インジケータ ===== -->
-    <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
-      <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
-      <li class="step-line"></li>
-      <li class="step" data-step="2"><span>2</span>証拠写真</li>
-      <li class="step-line"></li>
-      <li class="step" data-step="3"><span>3</span>確認テスト</li>
-    </ol>
-
-    <!-- ===== STEP 1: ショートステップ ===== -->
-    <section id="step1" class="card screen">
-      <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
-      <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
-
-      <ul id="shortStepList" class="space-y-2"></ul>
-
-      <!-- 自分だけのステップ追加 -->
-      <form id="addStepForm" class="flex gap-2 mt-3">
-        <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）"
-               class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <button class="btn-ghost text-sm" type="submit">追加</button>
-      </form>
-
-      <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
-        達成！ 次へ進む
-      </button>
-    </section>
-
-    <!-- ===== STEP 2: 証拠写真アップロード ===== -->
-    <section id="step2" class="card screen hidden">
-      <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
-      <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
-
-      <!-- プレビュー枠（タップするとアルバムから選択） -->
-      <label for="photoInput" id="photoDropzone"
-             class="flex flex-col items-center justify-center border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-xl h-56 cursor-pointer overflow-hidden relative">
-        <div id="photoPlaceholder" class="text-center text-indigo-500">
-          <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
-            <circle cx="12" cy="13" r="3"/>
-          </svg>
-          <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
+        <div class="flex items-end gap-2 mt-4">
+          <span class="text-4xl leading-none">🔥</span>
+          <span id="streakCount" class="text-5xl font-extrabold leading-none tabular-nums">0</span>
+          <span class="text-base font-bold mb-1">日連続</span>
         </div>
-        <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
-      </label>
 
-      <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
-      <div class="grid grid-cols-2 gap-2 mt-3">
-        <label for="cameraInput" class="btn-ghost text-sm text-center cursor-pointer py-3">📷 カメラで撮る</label>
-        <label for="photoInput" class="btn-ghost text-sm text-center cursor-pointer py-3">🖼️ アルバムから選ぶ</label>
-      </div>
-      <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
-      <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
-      <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
+        <!-- 今週の達成（月〜日） -->
+        <ol id="weekRow" class="week-row mt-5"></ol>
+      </section>
 
-      <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
-        写真を送信して問題生成
-      </button>
-      <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
-        デモ問題で試す（AIを使わない）
+      <!-- 今日を始める -->
+      <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
+        今日のちょいステップを始める
       </button>
 
-      <!-- ローディング表示 -->
-      <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-indigo-600">
-        <div class="spinner"></div>
-        <span id="loadingText" class="text-sm">AIが問題を作成中…</span>
-      </div>
-      <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+      <!-- ログインのおすすめ（ログイン機能があって未ログインのとき） -->
+      <section id="homeLoginNudge" class="hidden card mt-4 flex items-center gap-3">
+        <div class="text-2xl">🔑</div>
+        <p class="flex-1 text-sm text-slate-600">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
+        <button id="homeLoginBtn" class="btn-primary text-sm whitespace-nowrap">ログイン</button>
+      </section>
 
-      <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
-    </section>
+      <!-- 数字 -->
+      <section class="grid grid-cols-3 gap-3 mt-4">
+        <div class="stat-card">
+          <p class="stat-label">累計</p>
+          <p class="stat-value"><span id="totalCount">0</span><small>日</small></p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">今月</p>
+          <p class="stat-value"><span id="monthCount">0</span><small>日</small></p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">ベスト</p>
+          <p class="stat-value"><span id="bestStreak">0</span><small>日</small></p>
+        </div>
+      </section>
 
-    <!-- ===== STEP 3: 確認テスト ===== -->
-    <section id="step3" class="card screen hidden">
-      <div class="flex items-center justify-between mb-2">
-        <span id="quizProgress" class="text-sm font-medium text-indigo-600">Q1 / 3</span>
-        <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
-      </div>
-      <div class="h-2 bg-slate-100 rounded-full mb-4 overflow-hidden">
-        <div id="quizBar" class="h-full bg-indigo-500 transition-all duration-300" style="width:0%"></div>
-      </div>
+      <!-- 次のバッジまで -->
+      <section id="nextBadgeCard" class="card mt-4">
+        <div class="flex items-center gap-3">
+          <div id="nextBadgeIcon" class="badge-icon">🥉</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs text-slate-500">次のバッジまで</p>
+            <p id="nextBadgeText" class="text-sm font-bold truncate"></p>
+            <div class="progress mt-2"><div id="nextBadgeBar" class="progress-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </section>
 
-      <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
-      <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
-      <div id="quizChoices" class="space-y-2"></div>
+      <!-- 最近の記録 -->
+      <section class="mt-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="section-title">最近の記録</h2>
+          <button class="link-btn" data-goto="record">すべて見る</button>
+        </div>
+        <ul id="recentLogs" class="space-y-2"></ul>
+      </section>
+    </main>
 
-      <!-- 採点結果（正解/不正解＋解説） -->
-      <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+    <!-- =====================================================
+         タブ：記録
+         ===================================================== -->
+    <main id="tabRecord" class="tab hidden px-4 pb-28 pt-3">
 
-      <!-- 問題の作成にかかった時間（遅いときの原因調査用） -->
-      <p id="quizTiming" class="text-xs text-slate-400 mt-4"></p>
+      <!-- カレンダー -->
+      <section class="card">
+        <div class="flex items-center justify-between mb-3">
+          <button id="calPrev" class="icon-btn" aria-label="前の月">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+          </button>
+          <div class="text-center">
+            <p id="calTitle" class="font-bold"></p>
+            <p id="calSummary" class="text-xs text-slate-500"></p>
+          </div>
+          <button id="calNext" class="icon-btn" aria-label="次の月">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="cal-grid cal-head"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+        <div id="calGrid" class="cal-grid"></div>
+      </section>
 
-      <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
-    </section>
+      <!-- バッジ -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">バッジ</h2>
+        <div id="badgeGrid" class="grid grid-cols-4 gap-2"></div>
+      </section>
 
-    <!-- ===== 完了画面 ===== -->
-    <section id="stepDone" class="card screen hidden text-center">
-      <div class="text-6xl mb-3 celebrate">🎉</div>
-      <h2 class="text-2xl font-bold text-indigo-600 mb-2">テストクリア！習慣達成！</h2>
-      <p id="doneScore" class="text-slate-600 mb-1"></p>
-      <p id="doneMessage" class="text-sm text-slate-500 mb-6"></p>
-      <button id="restartBtn" class="btn-primary w-full py-3">もう一度チャレンジ</button>
-    </section>
+      <!-- タイムライン -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">これまでの記録</h2>
+        <ul id="allLogs" class="space-y-2"></ul>
+      </section>
+    </main>
+
+    <!-- =====================================================
+         タブ：設定
+         ===================================================== -->
+    <main id="tabSettings" class="tab hidden px-4 pb-28 pt-3 space-y-4">
+
+      <!-- アカウント（Firebase 設定済みのときだけ表示） -->
+      <section id="accountBar" class="hidden card flex items-center gap-3">
+        <img id="accountAvatar" class="hidden w-10 h-10 rounded-full" alt="" referrerpolicy="no-referrer" />
+        <div class="flex-1 min-w-0">
+          <p id="accountName" class="text-sm font-bold truncate">ログインしていません</p>
+          <p id="accountStatus" class="text-xs text-slate-500">ログインすると、AIで問題を作れて、記録もスマホとPCで共有できます</p>
+        </div>
+        <button id="loginBtn" class="btn-primary text-sm whitespace-nowrap">Googleでログイン</button>
+        <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
+      </section>
+
+      <!-- リマインド通知（ログイン中かつ通知の設定があるときだけ表示） -->
+      <section id="notifyCard" class="hidden card">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-bold">🔔 リマインド通知</p>
+            <p id="notifyStatus" class="text-xs text-slate-500">毎日決まった時刻にお知らせします（その日達成済みなら送りません）</p>
+          </div>
+          <input id="notifyTime" type="time" value="20:00" step="300" class="input w-auto px-2 py-1" />
+        </div>
+        <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
+        <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
+      </section>
+
+      <!-- 自分で追加したステップ -->
+      <section class="card">
+        <p class="text-sm font-bold">✏️ 自分で追加したステップ</p>
+        <p class="text-xs text-slate-500 mb-2">ステップは、始めるときの画面から追加できます</p>
+        <ul id="customStepList" class="divide-y divide-slate-100"></ul>
+      </section>
+
+      <!-- APIキー（Firebase 経由でAIを使えないときだけ表示） -->
+      <section id="settingsPanel" class="card">
+        <p class="text-sm font-bold mb-2">🤖 AIの設定</p>
+        <label for="apiKeyInput" class="block text-sm font-medium mb-1">Gemini APIキー</label>
+        <div class="flex gap-2">
+          <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off" class="input flex-1 min-w-0" />
+          <button id="toggleKeyVisibility" class="btn-ghost text-sm" type="button">表示</button>
+        </div>
+        <label for="modelSelect" class="block text-sm font-medium mt-3 mb-1">モデル</label>
+        <!-- モデルは提供終了されることがあるため、候補から選ぶだけでなく自由入力もできるようにしている -->
+        <input id="modelSelect" list="modelOptions" autocomplete="off" spellcheck="false" class="input w-full" />
+        <datalist id="modelOptions">
+          <option value="gemini-3.8-flash">推奨</option>
+        </datalist>
+        <p class="text-xs text-slate-400 mt-1">「このモデルは使えません」というエラーが出たら、エラー文で案内されたモデル名をここに入力して保存してください。</p>
+        <div class="flex gap-2 mt-3">
+          <button id="saveApiKey" class="btn-primary flex-1">保存</button>
+          <button id="clearApiKey" class="btn-ghost">削除</button>
+        </div>
+        <p id="apiKeyStatus" class="text-xs text-slate-500 mt-2"></p>
+        <p class="text-xs text-slate-400 mt-2">
+          ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
+          キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
+        </p>
+      </section>
+
+      <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
+    </main>
+
+    <!-- =====================================================
+         記録の流れ（ちょいステップ → 写真 → テスト → 達成）
+         ===================================================== -->
+    <main id="tabFlow" class="tab hidden px-4 pb-10 pt-3">
+
+      <!-- 進捗インジケータ -->
+      <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
+        <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="2"><span>2</span>証拠写真</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="3"><span>3</span>確認テスト</li>
+      </ol>
+
+      <!-- STEP 1: ショートステップ -->
+      <section id="step1" class="card screen">
+        <h2 class="font-bold text-lg mb-1">まずはこれだけ</h2>
+        <p class="text-sm text-slate-500 mb-4">1つでもできたら立派な一歩。チェックしよう！</p>
+
+        <ul id="shortStepList" class="space-y-2"></ul>
+
+        <!-- 自分だけのステップ追加 -->
+        <form id="addStepForm" class="flex gap-2 mt-3">
+          <input id="newStepInput" type="text" maxlength="30" placeholder="ステップを追加（例：ペンを持った）" class="input flex-1 min-w-0" />
+          <button class="btn-ghost text-sm" type="submit">追加</button>
+        </form>
+
+        <button id="achieveBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+          達成！ 次へ進む
+        </button>
+      </section>
+
+      <!-- STEP 2: 証拠写真アップロード -->
+      <section id="step2" class="card screen hidden">
+        <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
+        <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
+
+        <!-- プレビュー枠（タップするとアルバムから選択） -->
+        <label for="photoInput" id="photoDropzone" class="photo-drop">
+          <div id="photoPlaceholder" class="text-center">
+            <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 0 1 2-2h.9a2 2 0 0 0 1.7-.9l.8-1.2A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+              <circle cx="12" cy="13" r="3"/>
+            </svg>
+            <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
+          </div>
+          <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
+        </label>
+
+        <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <label for="cameraInput" class="btn-ghost text-sm text-center cursor-pointer py-3">📷 カメラで撮る</label>
+          <label for="photoInput" class="btn-ghost text-sm text-center cursor-pointer py-3">🖼️ アルバムから選ぶ</label>
+        </div>
+        <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
+        <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
+
+        <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+          写真を送信して問題生成
+        </button>
+        <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
+          デモ問題で試す（AIを使わない）
+        </button>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="hidden mt-4 flex items-center justify-center gap-3 text-sky-600">
+          <div class="spinner"></div>
+          <span id="loadingText" class="text-sm">AIが問題を作成中…</span>
+        </div>
+        <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
+
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+      </section>
+
+      <!-- STEP 3: 確認テスト -->
+      <section id="step3" class="card screen hidden">
+        <div class="flex items-center justify-between mb-2">
+          <span id="quizProgress" class="text-sm font-bold text-sky-600">Q1 / 3</span>
+          <span id="quizScore" class="text-sm text-slate-500">正解 0</span>
+        </div>
+        <div class="progress mb-4"><div id="quizBar" class="progress-bar" style="width:0%"></div></div>
+
+        <p id="quizTopic" class="text-xs text-slate-400 mb-1"></p>
+        <h2 id="quizQuestion" class="font-bold text-lg mb-4 leading-relaxed"></h2>
+        <div id="quizChoices" class="space-y-2"></div>
+
+        <!-- 採点結果（正解/不正解＋解説） -->
+        <div id="quizFeedback" class="hidden mt-4 rounded-lg p-3 text-sm"></div>
+
+        <!-- 問題の作成にかかった時間（遅いときの原因調査用） -->
+        <p id="quizTiming" class="text-xs text-slate-400 mt-4"></p>
+
+        <button id="nextQuestionBtn" class="hidden btn-primary w-full mt-4 py-3">次の問題へ</button>
+      </section>
+
+      <!-- 完了画面 -->
+      <section id="stepDone" class="screen hidden text-center">
+        <div class="done-card">
+          <p class="text-sm font-bold opacity-90">テストクリア！習慣達成！</p>
+          <div class="flex items-end justify-center gap-2 mt-3">
+            <span class="text-5xl leading-none celebrate">🔥</span>
+            <span id="doneStreak" class="text-6xl font-extrabold leading-none tabular-nums">0</span>
+            <span class="text-lg font-bold mb-1">日連続</span>
+          </div>
+          <p id="doneStreakNote" class="text-sm mt-2 opacity-90"></p>
+        </div>
+
+        <!-- 新しく獲得したバッジ -->
+        <div id="newBadges" class="hidden card mt-4"></div>
+
+        <div class="card mt-4">
+          <p id="doneScore" class="font-bold text-slate-700"></p>
+          <p id="doneMessage" class="text-sm text-slate-500 mt-1"></p>
+        </div>
+
+        <button id="restartBtn" class="btn-primary btn-cta w-full mt-5">ホームに戻る</button>
+      </section>
+    </main>
+
+    <!-- ===== 下のタブバー ===== -->
+    <nav id="tabBar" class="tab-bar">
+      <button class="tab-btn" data-tab="home">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>ホーム</span>
+      </button>
+      <button class="tab-btn" data-tab="record">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path stroke-linecap="round" d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>
+        <span>記録</span>
+      </button>
+      <button class="tab-btn" data-tab="settings">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+        <span>設定</span>
+      </button>
+    </nav>
   </div>
 
   <!-- 紙吹雪用レイヤー -->
