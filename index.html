@@ -6,6 +6,10 @@
   <title>ちょいステップ習慣</title>
   <!-- iPhone で「ホーム画面に追加」したときのアプリ名 -->
   <meta name="apple-mobile-web-app-title" content="ちょいステップ" />
+  <!-- ホーム画面に追加したときのアプリ情報とアイコン（通知を受け取るのに必要） -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#4f46e5" />
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
@@ -75,6 +79,20 @@
         ※キーはこの端末のブラウザ（localStorage）に保存されます。ログイン中は、あなたのアカウントにも保存され他の端末と共有されます。
         キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline">Google AI Studio</a> で取得できます。
       </p>
+    </section>
+
+    <!-- ===== リマインド通知（ログイン中かつ通知の設定があるときだけ表示） ===== -->
+    <section id="notifyCard" class="hidden card mb-4">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-bold">🔔 リマインド通知</p>
+          <p id="notifyStatus" class="text-xs text-slate-500">毎日決まった時刻にお知らせします（その日達成済みなら送りません）</p>
+        </div>
+        <input id="notifyTime" type="time" value="20:00" step="300"
+               class="border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      </div>
+      <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
+      <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
     </section>
 
     <!-- ===== 達成状況 ===== -->

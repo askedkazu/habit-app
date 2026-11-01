@@ -117,6 +117,12 @@
     loading: $("loading"),
     loadingText: $("loadingText"),
     quizTiming: $("quizTiming"),
+    // リマインド通知
+    notifyCard: $("notifyCard"),
+    notifyStatus: $("notifyStatus"),
+    notifyTime: $("notifyTime"),
+    notifyOnBtn: $("notifyOnBtn"),
+    notifyOffBtn: $("notifyOffBtn"),
     errorMsg: $("errorMsg"),
     // STEP3
     quizProgress: $("quizProgress"),
@@ -339,12 +345,15 @@
       cloud.db = fsMod.getFirestore(app);
       // Firebase AI Logic（Gemini Developer API）。APIキーは Firebase 側で管理される
       cloud.ai = aiMod.getAI(app, { backend: new aiMod.GoogleAIBackend() });
+      // リマインド通知（失敗してもアプリの他の機能は使えるようにする）
+      await initNotify(app).catch((err) => console.error(err));
 
       // ログイン状態が変わるたび（ページを開いた直後も）呼ばれる
       authMod.onAuthStateChanged(cloud.auth, async (user) => {
         cloud.user = user;
         setAccountUI(user);
         if (user) await pullFromCloud();
+        renderNotifyUI();
       });
     } catch (err) {
       console.error(err);
@@ -395,6 +404,8 @@
       cloud.pushTimer = null;
       await pushToCloud();
     }
+    // ログアウトした端末に、その人の通知が届き続けないようにする
+    if (getLocalNotifyToken()) await disableNotify().catch(() => {});
     await cloud.authMod.signOut(cloud.auth);
     // 次に使う人に記録やAPIキーが見えないよう、この端末のデータを消す
     Object.values(STORAGE_KEYS).forEach((key) => {
@@ -426,12 +437,14 @@
     cloud.pulling = true;
     try {
       const snap = await cloud.fsMod.getDoc(userDocRef());
+      cloud.notifyTime = null; // 別のアカウントの設定が残らないようにする
       if (snap.exists()) {
         const d = snap.data();
         writeLocal(STORAGE_KEYS.apiKey, d.apiKey || null);
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
+        cloud.notifyTime = d.notifyTime || null;
       } else {
         // 初めてのログイン：この端末の記録をアカウントに引き継ぐ
         await pushToCloud();
@@ -492,6 +505,162 @@
     updateApiKeyStatus();
     renderShortSteps();
     renderStats();
+  }
+
+  /* ==========================================================
+   * リマインド通知（Firebase Cloud Messaging）
+   * ----------------------------------------------------------
+   * - 「この端末で通知を受け取る」を押すと、通知の許可を取り、
+   *   この端末の通知の宛先（FCMトークン）を users/{uid} に保存する
+   * - 通知を送るのは GitHub Actions（.github/workflows/notify.yml）。
+   *   15分ごとに、通知時刻を過ぎていて今日まだ達成していない人に送る
+   * - アプリを閉じていても sw.js（Service Worker）が受け取って表示する
+   * ========================================================== */
+  const NOTIFY_TOKEN_KEY = "habitApp.notifyToken"; // この端末のFCMトークン
+  const DEFAULT_NOTIFY_TIME = "20:00";
+
+  const notify = {
+    mod: null,       // firebase-messaging モジュール
+    messaging: null,
+    supported: false,
+  };
+
+  async function initNotify(app) {
+    if (!window.FIREBASE_VAPID_KEY) return; // 未設定なら通知機能は出さない
+    const mod = await import(`${FIREBASE_SDK}/firebase-messaging.js`);
+    notify.mod = mod;
+    notify.supported = await mod.isSupported().catch(() => false);
+    if (notify.supported) notify.messaging = mod.getMessaging(app);
+
+    el.notifyOnBtn.addEventListener("click", () => runNotifyAction(enableNotify));
+    el.notifyOffBtn.addEventListener("click", () => runNotifyAction(disableNotify));
+    el.notifyTime.addEventListener("change", saveNotifyTime);
+  }
+
+  function getLocalNotifyToken() {
+    return storage.get(NOTIFY_TOKEN_KEY, "");
+  }
+
+  function setLocalNotifyToken(token) {
+    // 端末ごとの値なのでアカウントには同期しない（writeLocal を使う）
+    writeLocal(NOTIFY_TOKEN_KEY, token || null);
+  }
+
+  // 通知の許可状態（Notification がない環境では "unsupported"）
+  function notifyPermission() {
+    return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  }
+
+  function isIOS() {
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  // 通知カードの表示を、ログイン状態・端末の対応状況・許可状態に合わせて更新する
+  function renderNotifyUI(message) {
+    const show = !!(window.FIREBASE_VAPID_KEY && notify.mod && cloud.user);
+    el.notifyCard.classList.toggle("hidden", !show);
+    if (!show) return;
+
+    el.notifyTime.value = cloud.notifyTime || DEFAULT_NOTIFY_TIME;
+    const on = !!getLocalNotifyToken() && notifyPermission() === "granted";
+    el.notifyOnBtn.classList.toggle("hidden", on);
+    el.notifyOffBtn.classList.toggle("hidden", !on);
+    el.notifyOnBtn.disabled = false;
+
+    let status;
+    if (message) {
+      status = message;
+    } else if (!notify.supported) {
+      // iPhone はホーム画面に追加して開いたときだけ通知を使える
+      status =
+        isIOS() && !isStandalone()
+          ? "通知を使うには、Safariの共有ボタン →「ホーム画面に追加」で追加したアプリから開いてください"
+          : "このブラウザは通知に対応していません";
+      el.notifyOnBtn.disabled = true;
+    } else if (notifyPermission() === "denied") {
+      status = "通知がブロックされています。端末の設定で、このアプリの通知を許可してください";
+      el.notifyOnBtn.disabled = true;
+    } else if (on) {
+      status = `毎日 ${el.notifyTime.value} にお知らせします（その日達成済みなら送りません）`;
+    } else {
+      status = "毎日決まった時刻にお知らせします（その日達成済みなら送りません）";
+    }
+    el.notifyStatus.textContent = status;
+  }
+
+  // ボタン操作中は二重に押せないようにし、失敗したら理由を表示する
+  async function runNotifyAction(action) {
+    el.notifyOnBtn.disabled = true;
+    el.notifyOffBtn.disabled = true;
+    try {
+      await action();
+      renderNotifyUI();
+    } catch (err) {
+      console.error(err);
+      renderNotifyUI(`通知の設定に失敗しました（${err.code || err.message}）`);
+    } finally {
+      el.notifyOffBtn.disabled = false;
+    }
+  }
+
+  // この端末で通知を受け取れるようにする
+  async function enableNotify() {
+    // 許可ダイアログは、ボタンを押した直後に出す必要がある（iPhone の制約）
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      throw new Error("通知が許可されませんでした");
+    }
+    const registration = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const token = await notify.mod.getToken(notify.messaging, {
+      vapidKey: window.FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: registration,
+    });
+    if (!token) throw new Error("通知の宛先を取得できませんでした");
+
+    const { setDoc, arrayUnion } = cloud.fsMod;
+    const time = el.notifyTime.value || DEFAULT_NOTIFY_TIME;
+    await setDoc(
+      userDocRef(),
+      {
+        notifyEnabled: true,
+        notifyTime: time,
+        notifyTz: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo",
+        notifyTokens: arrayUnion(token),
+      },
+      { merge: true }
+    );
+    cloud.notifyTime = time;
+    setLocalNotifyToken(token);
+  }
+
+  // この端末への通知をやめる（他の端末の通知はそのまま）
+  async function disableNotify() {
+    const token = getLocalNotifyToken();
+    if (token && cloud.user) {
+      const { setDoc, arrayRemove } = cloud.fsMod;
+      await setDoc(userDocRef(), { notifyTokens: arrayRemove(token) }, { merge: true });
+    }
+    if (notify.messaging) await notify.mod.deleteToken(notify.messaging).catch(() => {});
+    setLocalNotifyToken(null);
+  }
+
+  // 通知時刻を変えたらアカウントに保存する（全端末共通）
+  async function saveNotifyTime() {
+    if (!cloud.user) return;
+    const time = el.notifyTime.value || DEFAULT_NOTIFY_TIME;
+    try {
+      await cloud.fsMod.setDoc(
+        userDocRef(),
+        { notifyTime: time, notifyTz: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo" },
+        { merge: true }
+      );
+      cloud.notifyTime = time;
+      renderNotifyUI();
+    } catch (err) {
+      console.error(err);
+      renderNotifyUI("通知時刻を保存できませんでした");
+    }
   }
 
   /* ==========================================================

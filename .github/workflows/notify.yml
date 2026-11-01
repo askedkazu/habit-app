@@ -1,0 +1,38 @@
+# リマインド通知を送る（15分ごと）
+# 送る条件は scripts/send-reminders.mjs を参照。
+# リポジトリの Settings → Secrets and variables → Actions に
+# FIREBASE_SERVICE_ACCOUNT（Firebase のサービスアカウント鍵のJSON）を登録すると動く。
+name: リマインド通知
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # Actions タブから手動でも実行できる
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 依存パッケージをインストール
+        working-directory: scripts
+        run: npm install --no-audit --no-fund
+
+      - name: 通知を送る
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node send-reminders.mjs

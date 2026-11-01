@@ -14,6 +14,10 @@ HTML / CSS / JavaScript のみで動作し、ビルドは不要です。
 | `app.js` | 画面遷移、ショートステップ、写真処理、Gemini API 呼び出し、クイズ採点、アカウント同期 |
 | `firebase-config.js` | アカウント機能用の Firebase 設定（未設定ならログイン機能なし） |
 | `build.py` | 1ファイル版 `habit-app.html` を作るスクリプト |
+| `sw.js` | Service Worker。アプリを閉じていても通知を受け取って表示する |
+| `manifest.webmanifest`, `icons/` | ホーム画面に追加したときのアプリ名・アイコン |
+| `scripts/send-reminders.mjs` | リマインド通知を送るスクリプト（GitHub Actions から実行） |
+| `.github/workflows/notify.yml` | 15分ごとに通知スクリプトを実行する |
 
 ## 起動方法
 
@@ -89,3 +93,19 @@ APIキーがなくても「APIキーなしでデモ問題を試す」で画面�
 - データは `users/{uid}` に保存（APIキー、モデル、追加ステップ、達成履歴）
 - ログインは公開URL（GitHub Pages）や `localhost` で開いたときに使えます。ファイルを直接開いた場合（file://）は使えません
 - ログアウトすると、その端末に保存されたデータは消去されます（アカウントには残ります）
+
+## リマインド通知の設定
+
+毎日決まった時刻に「今日のちょいステップ」を通知します（その日達成済みなら送りません）。
+通知は GitHub Actions が15分ごとに確認して送るため、数分〜15分ほど遅れることがあります。
+
+1. Firebase → プロジェクトの設定 → **Cloud Messaging** →「ウェブ プッシュ証明書」で **鍵ペアを生成**し、
+   公開鍵を `firebase-config.js` の `FIREBASE_VAPID_KEY` に設定
+2. Firebase → プロジェクトの設定 → **サービス アカウント** →「新しい秘密鍵の生成」で JSON をダウンロード
+3. GitHub のリポジトリ → Settings → Secrets and variables → Actions →「New repository secret」で、
+   名前 `FIREBASE_SERVICE_ACCOUNT`、値に JSON の中身を丸ごと貼り付け
+4. iPhone は「ホーム画面に追加」したアプリから開き、「この端末で通知を受け取る」を押す
+
+- 通知の宛先（FCMトークン）・通知時刻・タイムゾーンは `users/{uid}` に保存
+- ログアウトすると、その端末への通知は止まる
+- GitHub は、リポジトリに60日間更新がないと定期実行を自動で止めます（Actions タブから再開できます）

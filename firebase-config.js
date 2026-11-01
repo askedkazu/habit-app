@@ -30,3 +30,11 @@ window.FIREBASE_APP_CHECK = {
   provider: "recaptcha-enterprise", // Fraud Defense（旧称 reCAPTCHA Enterprise）
   siteKey: "6Lfi1AQuAAAAAAjyajy3--qRmePUGPjTOIFTySu3",
 };
+
+/* ----------------------------------------------------------
+   リマインド通知（Firebase Cloud Messaging）
+   Firebase コンソール → プロジェクトの設定 → Cloud Messaging →
+   「ウェブ プッシュ証明書」の「鍵ペア」（公開鍵。公開して問題ない値）
+   null のままなら通知機能は表示しない
+   ---------------------------------------------------------- */
+window.FIREBASE_VAPID_KEY = null;

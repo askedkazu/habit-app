@@ -1,0 +1,9 @@
+{
+  "name": "habit-app-scripts",
+  "private": true,
+  "type": "module",
+  "description": "リマインド通知を送るスクリプト（GitHub Actions から実行）",
+  "dependencies": {
+    "firebase-admin": "14.5.0"
+  }
+}
