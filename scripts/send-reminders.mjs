@@ -12,6 +12,8 @@
 
    必要な環境変数:
    - FIREBASE_SERVICE_ACCOUNT: Firebase のサービスアカウント鍵（JSON文字列）
+   - TEST_SEND: "true" なら上の条件を無視して、通知オンの全員に今すぐ送る
+     （動作確認用。その日の通常の通知には影響しない）
    ========================================================== */
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -21,6 +23,7 @@ const APP_URL = "https://askedkazu.github.io/habit-app/";
 const DEFAULT_TIME = "20:00";
 const DEFAULT_TZ = "Asia/Tokyo";
 const LATE_LIMIT_MINUTES = 180; // 通知時刻からこの分数を過ぎたら、その日は送らない
+const TEST_SEND = process.env.TEST_SEND === "true";
 
 // 毎日同じ文言だと見慣れてしまうので、いくつかから選ぶ
 const MESSAGES = [
@@ -91,12 +94,28 @@ async function main() {
     const late = local.minutes - toMinutes(user.notifyTime);
     const alreadyNotified = user.lastNotifiedDate === local.date;
     const achievedToday = (user.history || []).includes(local.date);
-    if (late < 0 || late > LATE_LIMIT_MINUTES || alreadyNotified || achievedToday) {
-      skipped++;
-      continue;
+    if (!TEST_SEND) {
+      // 送らなかった理由をログに残す（個人を特定する情報は出さない）
+      const reason =
+        late < 0
+          ? `通知時刻 ${user.notifyTime || DEFAULT_TIME} より前`
+          : late > LATE_LIMIT_MINUTES
+            ? `通知時刻 ${user.notifyTime || DEFAULT_TIME} から3時間以上経過`
+            : alreadyNotified
+              ? "今日はすでに通知済み"
+              : achievedToday
+                ? "今日はすでに達成済み"
+                : null;
+      if (reason) {
+        console.log(`対象外: ${reason}（現地時刻 ${Math.floor(local.minutes / 60)}:${String(local.minutes % 60).padStart(2, "0")}）`);
+        skipped++;
+        continue;
+      }
     }
 
-    const body = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+    const body = TEST_SEND
+      ? "テスト通知です。これが届けば通知の設定は完了です🎉"
+      : MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
     // 表示は sw.js が行うため、data だけを送る
     const res = await messaging.sendEachForMulticast({
       tokens,
@@ -108,16 +127,17 @@ async function main() {
     const invalid = res.responses
       .map((r, i) => (!r.success && INVALID_TOKEN_ERRORS.has(r.error?.code) ? tokens[i] : null))
       .filter(Boolean);
-    const update = { lastNotifiedDate: local.date };
+    // テスト送信では「今日通知した」記録を残さない（その日の通常の通知を止めないため）
+    const update = TEST_SEND ? {} : { lastNotifiedDate: local.date };
     if (invalid.length) update.notifyTokens = FieldValue.arrayRemove(...invalid);
-    await doc.ref.update(update);
+    if (Object.keys(update).length) await doc.ref.update(update);
 
     sent++;
     // 個人を特定できる情報（トークンやメール）はログに出さない
     console.log(`送信: 成功 ${res.successCount} / 失敗 ${res.failureCount}（無効な宛先 ${invalid.length} 件を削除）`);
   }
 
-  console.log(`完了: 通知した人 ${sent} 人 / 対象外 ${skipped} 人`);
+  console.log(`完了${TEST_SEND ? "（テスト送信）" : ""}: 通知した人 ${sent} 人 / 対象外 ${skipped} 人`);
 }
 
 main().catch((err) => {

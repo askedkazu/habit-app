@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch: # Actions タブから手動でも実行できる
+    inputs:
+      test:
+        description: "テスト送信（時刻や達成状況に関係なく、通知オンの全員に今すぐ送る）"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,4 +40,5 @@ jobs:
         working-directory: scripts
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TEST_SEND: ${{ inputs.test && 'true' || 'false' }}
         run: node send-reminders.mjs
