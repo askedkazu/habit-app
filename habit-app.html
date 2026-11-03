@@ -838,6 +838,10 @@ window.FIREBASE_VAPID_KEY =
 
   // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
   const DEFAULT_MODEL = "gemini-3.8-flash";
+  // 既定のモデルが混雑などで答えないときに使う、軽くて速い予備のモデル（Firebase 経由のとき）
+  const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+  // 1回の問い合わせを打ち切るまでの時間。SDK の既定は180秒で、混雑時に3分待たされていた
+  const AI_TIMEOUT_MS = 30_000;
   // 新規ユーザーには提供終了になった旧モデル。保存されていたら既定モデルに置き換える
   const RETIRED_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
 
@@ -2215,15 +2219,16 @@ window.FIREBASE_VAPID_KEY =
       },
     });
 
-    const model = getGenerativeModel(cloud.ai, {
-      model: DEFAULT_MODEL,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
+    // 試す順番：いつものモデル → だめなら軽くて速い予備のモデル
+    const attempts = [
+      {
+        label: "AIで問題を作成",
+        model: DEFAULT_MODEL,
         // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
-    });
+      { label: "予備のAIで問題を作成", model: FALLBACK_MODEL },
+    ];
 
     // App Check の確認（初回は reCAPTCHA の読み込みがあるので、AIとは分けて計測する）
     if (cloud.appCheck) {
@@ -2231,31 +2236,45 @@ window.FIREBASE_VAPID_KEY =
       await cloud.appCheckMod.getToken(cloud.appCheck).catch(() => {});
     }
 
-    setPhase("AIで問題を作成");
-    let result;
-    try {
-      result = await model.generateContent([QUIZ_PROMPT, { inlineData: { mimeType, data: base64 } }]);
-    } catch (err) {
-      console.error(err);
-      const msg = String(err?.message || "");
-      if (/App Check/i.test(msg)) {
-        throw new Error(`アプリの確認（App Check）に失敗しました。ページを再読み込みしてもだめなら、管理者に連絡してください。\n${msg}`);
+    const failures = [];
+    for (const attempt of attempts) {
+      setPhase(attempt.label);
+      const model = getGenerativeModel(cloud.ai, {
+        model: attempt.model,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          ...(attempt.thinkingConfig && { thinkingConfig: attempt.thinkingConfig }),
+        },
+      });
+      try {
+        const result = await model.generateContent(
+          [QUIZ_PROMPT, { inlineData: { mimeType, data: base64 } }],
+          { timeout: AI_TIMEOUT_MS }
+        );
+        const text = result.response.text();
+        if (!text) throw new Error("AIから回答が得られませんでした");
+        return parseQuizJson(text);
+      } catch (err) {
+        console.error(err);
+        const msg = String(err?.message || err);
+        // 予備のモデルでも直らない失敗は、すぐに理由を伝える
+        if (/App Check/i.test(msg)) {
+          throw new Error(`アプリの確認（App Check）に失敗しました。ページを再読み込みしてもだめなら、管理者に連絡してください。\n${msg}`);
+        }
+        if (/blocked|SAFETY/i.test(msg)) {
+          throw new Error("画像がブロックされました。別の写真でお試しください。");
+        }
+        // 時間切れ・混雑・一時的なエラーなどは、次のモデルで試す
+        failures.push(`${attempt.model}: ${/abort|timeout|timed out/i.test(msg) ? `${AI_TIMEOUT_MS / 1000}秒で時間切れ` : msg}`);
       }
-      if (/429|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
-        throw new Error("AIが混み合っています。少し時間をおいてから、もう一度お試しください。");
-      }
-      if (/not.?found|404/i.test(msg)) {
-        throw new Error(`AIモデル「${DEFAULT_MODEL}」が使えなくなっています。管理者に連絡してください。\n${msg}`);
-      }
-      if (/blocked|SAFETY/i.test(msg)) {
-        throw new Error("画像がブロックされました。別の写真でお試しください。");
-      }
-      throw new Error(`問題の生成に失敗しました。\n${msg}`);
     }
 
-    const text = result.response.text();
-    if (!text) throw new Error("AIから回答が得られませんでした。もう一度お試しください。");
-    return parseQuizJson(text);
+    const detail = failures.join("\n");
+    if (/429|quota|RESOURCE_EXHAUSTED/i.test(detail)) {
+      throw new Error(`AIの利用が混み合っているか、無料枠の上限に達しています。少し時間をおいてから、もう一度お試しください。\n\n${detail}`);
+    }
+    throw new Error(`AIが応答しませんでした。少し時間をおいてから、もう一度お試しください。\n\n${detail}`);
   }
 
   /**
