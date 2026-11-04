@@ -419,9 +419,9 @@
       <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
         <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
-        <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
+        <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。<span id="photoMaxNote"></span></p>
 
-        <!-- プレビュー枠（タップするとアルバムから選択） -->
+        <!-- まだ写真がないときの枠（タップするとアルバムから選択） -->
         <label for="photoInput" id="photoDropzone" class="photo-drop">
           <div id="photoPlaceholder" class="text-center">
             <svg class="w-10 h-10 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -430,8 +430,11 @@
             </svg>
             <p class="font-medium">下のボタンから写真を撮る / 選ぶ</p>
           </div>
-          <img id="photoPreview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-900" alt="選択した写真のプレビュー" />
         </label>
+
+        <!-- 選んだ写真（×で1枚ずつ消せる。上限までは「＋」で追加できる） -->
+        <div id="photoGrid" class="hidden photo-grid"></div>
+        <p id="photoCount" class="hidden text-xs text-slate-500 mt-2"></p>
 
         <!-- capture="environment" を付けるとスマホでカメラしか起動せずアルバムから選べないため、入力を2つに分ける -->
         <div class="grid grid-cols-2 gap-2 mt-3">
@@ -440,7 +443,7 @@
         </div>
         <!-- display:none だと一部のスマホでタップに反応しないため、見えなくするだけにする -->
         <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
-        <input id="photoInput" type="file" accept="image/*" class="file-input-hidden" />
+        <input id="photoInput" type="file" accept="image/*" multiple class="file-input-hidden" />
 
         <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
           写真を送信して問題生成

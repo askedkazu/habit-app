@@ -48,6 +48,10 @@
   // Firebase SDK の読み込み元（アカウント機能を使うときだけ読み込む）
   const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 
+  // 一度に送れる写真の枚数
+  const MAX_PHOTOS = 4;
+  // 写真が複数あるときは、通信量を抑えるため1枚あたりを少し小さくする
+  const MAX_IMAGE_SIZE_MULTI = 1024;
   // 送信前に画像を縮小する際の最大辺（px）。通信量とAPIの負荷を抑えるため
   const MAX_IMAGE_SIZE = 1280;
 
@@ -182,8 +186,10 @@
     achieveBtn: $("achieveBtn"),
     // STEP2
     photoInput: $("photoInput"),
-    photoPreview: $("photoPreview"),
-    photoPlaceholder: $("photoPlaceholder"),
+    photoDropzone: $("photoDropzone"),
+    photoGrid: $("photoGrid"),
+    photoCount: $("photoCount"),
+    photoMaxNote: $("photoMaxNote"),
     cameraInput: $("cameraInput"),
     // 再読み込み
     reloadBtn: $("reloadBtn"),
@@ -284,7 +290,7 @@
    * アプリの状態
    * -------------------------------------------------------- */
   const state = {
-    selectedFile: null, // 選択された画像ファイル
+    photos: [],         // 選んだ写真 [{ file, url }]（url はプレビュー用）
     quiz: null,         // { topic, questions: [...] }
     currentIndex: 0,    // 現在の問題番号
     correctCount: 0,    // 正解数
@@ -1989,27 +1995,16 @@
    * ========================================================== */
   function initPhoto() {
     // カメラ撮影・アルバム選択のどちらでも同じ処理をする
+    // 写真は撮るたび・選ぶたびに追加していく（アルバムは一度に複数選べる）
     [el.cameraInput, el.photoInput].forEach((input) => {
       input.addEventListener("change", () => {
-        const file = input.files && input.files[0];
+        const files = [...(input.files || [])];
         input.value = ""; // 同じ写真を選び直しても change が発火するように
-        if (!file) return;
-        // HEIC などは type が空のことがあるので、空なら拡張子で判定する
-        if (file.type ? !file.type.startsWith("image/") : !/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name)) {
-          showError("画像ファイルを選択してください。");
-          return;
-        }
-        state.selectedFile = file;
-        hideError();
-
-        // プレビュー表示（Object URL を使うと大きな画像でも軽量）
-        if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
-        el.photoPreview.src = URL.createObjectURL(file);
-        el.photoPreview.classList.remove("hidden");
-        el.photoPlaceholder.classList.add("hidden");
-        el.generateBtn.disabled = false;
+        if (files.length) addPhotos(files);
       });
     });
+    el.photoMaxNote.textContent = `（写真は${MAX_PHOTOS}枚まで）`;
+    renderPhotos();
 
     el.generateBtn.addEventListener("click", onGenerateQuiz);
 
@@ -2022,6 +2017,78 @@
     document.querySelectorAll(".back-btn").forEach((btn) =>
       btn.addEventListener("click", () => showScreen(btn.dataset.back))
     );
+  }
+
+  function isImageFile(file) {
+    // HEIC などは type が空のことがあるので、空なら拡張子で判定する
+    return file.type ? file.type.startsWith("image/") : /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name);
+  }
+
+  function addPhotos(files) {
+    const images = files.filter(isImageFile);
+    const room = MAX_PHOTOS - state.photos.length;
+    hideError();
+    if (images.length < files.length) showError("画像ではないファイルは追加しませんでした。");
+    if (images.length > room) {
+      showError(
+        room > 0
+          ? `写真は${MAX_PHOTOS}枚までです。最初の${room}枚だけ追加しました。`
+          : `写真は${MAX_PHOTOS}枚までです。追加するには、どれかを × で消してください。`
+      );
+    }
+    // プレビューは Object URL を使うと大きな画像でも軽量
+    images.slice(0, Math.max(0, room)).forEach((file) => state.photos.push({ file, url: URL.createObjectURL(file) }));
+    renderPhotos();
+  }
+
+  function removePhoto(index) {
+    const [removed] = state.photos.splice(index, 1);
+    if (removed) URL.revokeObjectURL(removed.url);
+    renderPhotos();
+  }
+
+  function clearPhotos() {
+    state.photos.forEach((p) => URL.revokeObjectURL(p.url));
+    state.photos = [];
+    renderPhotos();
+  }
+
+  function renderPhotos() {
+    const count = state.photos.length;
+    el.photoDropzone.classList.toggle("hidden", count > 0);
+    el.photoGrid.classList.toggle("hidden", count === 0);
+    el.photoCount.classList.toggle("hidden", count === 0);
+    el.photoGrid.innerHTML = "";
+    state.photos.forEach((p, i) => {
+      const box = document.createElement("div");
+      box.className = "photo-thumb";
+      const img = document.createElement("img");
+      img.src = p.url;
+      img.alt = `${i + 1}枚目の写真`;
+      const no = document.createElement("span");
+      no.className = "photo-no";
+      no.textContent = `${i + 1}`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "photo-del";
+      del.setAttribute("aria-label", `${i + 1}枚目の写真を消す`);
+      del.textContent = "×";
+      del.addEventListener("click", () => removePhoto(i));
+      box.append(img, no, del);
+      el.photoGrid.append(box);
+    });
+    if (count > 0 && count < MAX_PHOTOS) {
+      // アルバムから追加（カメラは下の「カメラで撮る」から）
+      const add = document.createElement("label");
+      add.htmlFor = "photoInput";
+      add.className = "photo-add";
+      add.innerHTML = "<span>＋</span>写真を追加";
+      el.photoGrid.append(add);
+    }
+    el.photoCount.textContent =
+      count >= MAX_PHOTOS ? `${count}枚（これ以上は追加できません）` : `${count}枚 ・ あと${MAX_PHOTOS - count}枚まで追加できます`;
+    el.generateBtn.disabled = count === 0;
+    el.generateBtn.textContent = count > 1 ? `写真${count}枚を送信して問題生成` : "写真を送信して問題生成";
   }
 
   // 「写真を送信して問題生成」ボタンの処理
@@ -2042,7 +2109,7 @@
       showError("Gemini APIキーが未設定です。設定タブの「AIの設定」から入力してください。");
       return;
     }
-    if (!state.selectedFile) {
+    if (state.photos.length === 0) {
       showError("先に写真を選択してください。");
       return;
     }
@@ -2051,17 +2118,18 @@
     hideError();
     try {
       setPhase("写真の準備");
-      const { base64, mimeType } = await fileToResizedBase64(state.selectedFile, MAX_IMAGE_SIZE);
-      timing.imageKB = Math.round((base64.length * 3) / 4 / 1024);
+      const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
+      const images = await Promise.all(state.photos.map((p) => fileToResizedBase64(p.file, size)));
+      timing.imageKB = Math.round(images.reduce((sum, img) => sum + (img.base64.length * 3) / 4, 0) / 1024);
       let quiz;
       if (useFirebase) {
-        quiz = await generateQuizWithFirebase({ base64, mimeType });
+        quiz = await generateQuizWithFirebase({ images });
       } else {
         setPhase("AIで問題を作成");
-        quiz = await generateQuizWithGemini({ apiKey, model: getModel(), base64, mimeType });
+        quiz = await generateQuizWithGemini({ apiKey, model: getModel(), images });
       }
       setLoading(false);
-      el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${timing.imageKB}KB）`;
+      el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${images.length}枚・${timing.imageKB}KB）`;
       startQuiz(quiz);
     } catch (err) {
       console.error(err);
@@ -2107,9 +2175,10 @@
     } else if (timing.phase) {
       setPhase(""); // 最後の段階の時間を確定させる
     }
-    el.generateBtn.disabled = on || !state.selectedFile;
+    el.generateBtn.disabled = on || state.photos.length === 0;
     el.demoBtn.disabled = on;
-    el.generateBtn.textContent = on ? "生成中…" : "写真を送信して問題生成";
+    if (on) el.generateBtn.textContent = "生成中…";
+    else renderPhotos(); // ボタンの文言を写真の枚数に戻す
   }
 
   function showError(msg) {
@@ -2217,7 +2286,8 @@
 
   // AIへの指示文
   const QUIZ_PROMPT = `あなたは学習をサポートする優しい家庭教師です。
-添付の写真は、ユーザーが今勉強している教科書・ノート・参考書などのページです。
+添付の写真（1枚または複数枚）は、ユーザーが今勉強している教科書・ノート・参考書などのページです。
+写真が複数ある場合は、すべての写真の内容からバランスよく出題してください。
 
 写真に写っている内容「だけ」に基づいて、理解を確認するための4択の確認テストを3問作成してください。
 
@@ -2250,13 +2320,13 @@
    * 画像を Gemini に送って3問のクイズを生成する
    * @returns {Promise<{topic:string, questions:Array}>}
    */
-  async function generateQuizWithGemini({ apiKey, model, base64, mimeType }) {
+  async function generateQuizWithGemini({ apiKey, model, images }) {
     const body = {
       contents: [
         {
           role: "user",
           parts: [
-            { inline_data: { mime_type: mimeType, data: base64 } },
+            ...images.map(({ base64, mimeType }) => ({ inline_data: { mime_type: mimeType, data: base64 } })),
             { text: buildQuizPrompt() },
           ],
         },
@@ -2335,7 +2405,7 @@
    * APIキーは Firebase プロジェクト側で管理されるため、利用者の設定は不要。
    * モデルはサービス側で決める（DEFAULT_MODEL）。
    */
-  async function generateQuizWithFirebase({ base64, mimeType }) {
+  async function generateQuizWithFirebase({ images }) {
     const { getGenerativeModel, Schema, ThinkingLevel } = cloud.aiMod;
 
     // QUIZ_RESPONSE_SCHEMA と同じ形を、Firebase SDK の Schema で表したもの
@@ -2387,7 +2457,7 @@
       });
       try {
         const result = await model.generateContent(
-          [buildQuizPrompt(), { inlineData: { mimeType, data: base64 } }],
+          [buildQuizPrompt(), ...images.map(({ base64, mimeType }) => ({ inlineData: { mimeType, data: base64 } }))],
           { timeout: AI_TIMEOUT_MS }
         );
         const text = result.response.text();
@@ -2653,13 +2723,8 @@
 
   // 最初からやり直す（写真・チェックをリセット）
   function resetAll() {
-    state.selectedFile = null;
+    clearPhotos();
     state.quiz = null;
-    if (el.photoPreview.src) URL.revokeObjectURL(el.photoPreview.src);
-    el.photoPreview.removeAttribute("src");
-    el.photoPreview.classList.add("hidden");
-    el.photoPlaceholder.classList.remove("hidden");
-    el.generateBtn.disabled = true;
     hideError();
     renderShortSteps();
     // 教材は前回のものを選んだままにし、時間は0から（タイマー中はそのまま）
