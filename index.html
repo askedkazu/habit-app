@@ -77,18 +77,19 @@
         </div>
       </section>
 
-      <!-- カレンダーの空き時間から立てた勉強プラン（カレンダー連携中だけ表示） -->
-      <section id="planCard" class="hidden card mt-4">
+      <!-- 勉強の予定（アプリ内の予定と、カレンダーの空き時間からのおすすめ） -->
+      <section id="planCard" class="card mt-4">
         <div class="flex items-center justify-between gap-2">
-          <p class="text-xs font-bold text-slate-500">📅 今日の勉強プラン</p>
+          <p class="text-xs font-bold text-slate-500">📅 今日の勉強の予定</p>
           <button id="planToggle" class="link-btn">7日分を見る</button>
         </div>
+        <ul id="planTodayList" class="mt-1 space-y-1"></ul>
         <p id="planToday" class="text-base font-bold text-slate-800 mt-1"></p>
         <p id="planNote" class="text-xs text-slate-500 mt-0.5"></p>
         <ul id="planWeek" class="hidden mt-3 divide-y divide-slate-100 text-sm"></ul>
         <div class="flex gap-2 mt-3">
-          <a id="planGoogleBtn" class="btn-ghost text-xs flex-1 text-center" target="_blank" rel="noopener">＋ Googleカレンダー</a>
-          <button id="planIcsBtn" class="btn-ghost text-xs flex-1">＋ ほかのカレンダー</button>
+          <button id="planSuggestBtn" class="hidden btn-primary text-sm flex-1">＋ この時間で予定に入れる</button>
+          <button id="planAddBtn" class="btn-ghost text-sm flex-1">＋ 予定を追加</button>
         </div>
       </section>
 
@@ -158,6 +159,15 @@
         </div>
         <div class="cal-grid cal-head"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
         <div id="calGrid" class="cal-grid"></div>
+      </section>
+
+      <!-- これからの勉強の予定 -->
+      <section class="mt-6">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="section-title">これからの予定</h2>
+          <button id="recordAddPlanBtn" class="link-btn">＋ 予定を追加</button>
+        </div>
+        <ul id="upcomingPlans" class="space-y-2"></ul>
       </section>
 
       <!-- 教材ごとの勉強時間 -->
@@ -469,6 +479,34 @@
         <span>設定</span>
       </button>
     </nav>
+  </div>
+
+  <!-- 勉強の予定を追加 -->
+  <div id="planModal" class="hidden modal-backdrop">
+    <section class="modal-sheet">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-lg">勉強の予定を追加</h2>
+        <button id="planCloseBtn" class="icon-btn" aria-label="閉じる">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm font-bold text-slate-600">日にち<input id="planDate" type="date" class="input w-full mt-1" /></label>
+        <label class="text-sm font-bold text-slate-600">始める時刻<input id="planTime" type="time" step="300" class="input w-full mt-1" /></label>
+      </div>
+      <p class="field-label mt-4">勉強する時間</p>
+      <div id="planMinutesChips" class="grid grid-cols-5 gap-2">
+        <button type="button" class="time-chip" data-min="5">5分</button>
+        <button type="button" class="time-chip" data-min="15">15分</button>
+        <button type="button" class="time-chip" data-min="30">30分</button>
+        <button type="button" class="time-chip" data-min="60">60分</button>
+        <button type="button" class="time-chip" data-min="90">90分</button>
+      </div>
+      <p class="field-label mt-4">教材（任意）</p>
+      <div id="planBookList" class="flex flex-wrap gap-2"></div>
+      <p id="planConflict" class="hidden text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mt-3"></p>
+      <button id="planSaveBtn" class="btn-primary w-full py-3 mt-4">予定に入れる</button>
+    </section>
   </div>
 
   <!-- ログイン・アカウント作成 -->

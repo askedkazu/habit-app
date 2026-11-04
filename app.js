@@ -26,6 +26,7 @@
     logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
     books: "habitApp.books", // 登録した教材名の配列
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
+    plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
   };
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
@@ -220,8 +221,19 @@
     planToday: $("planToday"),
     planNote: $("planNote"),
     planWeek: $("planWeek"),
-    planGoogleBtn: $("planGoogleBtn"),
-    planIcsBtn: $("planIcsBtn"),
+    planTodayList: $("planTodayList"),
+    planSuggestBtn: $("planSuggestBtn"),
+    planAddBtn: $("planAddBtn"),
+    recordAddPlanBtn: $("recordAddPlanBtn"),
+    upcomingPlans: $("upcomingPlans"),
+    planModal: $("planModal"),
+    planCloseBtn: $("planCloseBtn"),
+    planDate: $("planDate"),
+    planTime: $("planTime"),
+    planMinutesChips: $("planMinutesChips"),
+    planBookList: $("planBookList"),
+    planConflict: $("planConflict"),
+    planSaveBtn: $("planSaveBtn"),
     // リマインド通知
     notifyCard: $("notifyCard"),
     notifyStatus: $("notifyStatus"),
@@ -668,6 +680,7 @@
         // アカウントにまだ一覧がなければ、この端末の一覧を残す（次の保存でアカウントへ）
         if (d.steps?.length) writeLocal(STORAGE_KEYS.steps, JSON.stringify(d.steps));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
+        if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
@@ -698,6 +711,7 @@
       steps: getAllSteps(),
       books: getBooks(),
       profile: getProfile(),
+      plans: getPlans(),
       updatedAt: serverTimestamp(),
     };
     // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
@@ -908,7 +922,7 @@
    * - GitHub Actions（scripts/sync-calendars.mjs）が予定の入っている時間帯だけを読み取り、
    *   users/{uid}.calendarBusy に保存する（ブラウザからは他サイトのカレンダーを直接読めないため）
    * - アプリはその時間帯を避けて、アンケートの「勉強しやすい時間帯」「1日の目標時間」から
-   *   毎日の勉強プランを立てる
+   *   毎日のおすすめの時間を出す。カレンダーへは書き込まず、予定はこのアプリの中に保存する
    * ========================================================== */
   const CALENDAR_HOWTO = {
     google: [
@@ -980,7 +994,6 @@
       const open = el.planWeek.classList.toggle("hidden");
       el.planToggle.textContent = open ? "7日分を見る" : "閉じる";
     });
-    el.planIcsBtn.addEventListener("click", downloadPlanIcs);
   }
 
   async function saveCalendarUrl() {
@@ -1096,114 +1109,247 @@
     return plan;
   }
 
-  let currentPlan = [];
+  let currentPlan = []; // カレンダーの空き時間からのおすすめ（7日分）
+
+  /* ---------- アプリ内の勉強の予定 ---------- */
+  function getPlans() {
+    return storage.getJSON(STORAGE_KEYS.plans, []);
+  }
+
+  function savePlans(plans) {
+    // 30日より前の予定は消して、時刻順に並べておく
+    const cutoff = dateKey(new Date(Date.now() - 30 * 86400000));
+    const kept = plans.filter((p) => p.date >= cutoff).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    storage.setJSON(STORAGE_KEYS.plans, kept);
+  }
+
+  function plansOn(key) {
+    return getPlans().filter((p) => p.date === key);
+  }
+
+  function deletePlan(id) {
+    savePlans(getPlans().filter((p) => p.id !== id));
+    renderStats();
+  }
+
+  function planStart(p) {
+    const [h, m] = p.time.split(":").map(Number);
+    const d = parseDateKey(p.date);
+    d.setHours(h, m);
+    return d;
+  }
+
+  // 例: "21:15〜21:45（30分）・英単語ターゲット"
+  function planText(p) {
+    const start = planStart(p);
+    const end = new Date(start.getTime() + p.minutes * 60000);
+    return `${formatClock(start)}〜${formatClock(end)}（${p.minutes}分）${p.book ? `・${p.book}` : ""}`;
+  }
+
+  // 予定の一覧の1行（右に削除ボタン）
+  function planRow(p, { showDate = false } = {}) {
+    const li = document.createElement("li");
+    li.className = "flex items-center justify-between gap-2";
+    const text = document.createElement("span");
+    text.className = "text-sm font-bold text-slate-800 truncate";
+    const d = parseDateKey(p.date);
+    text.textContent = `${showDate ? `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS[d.getDay()]}） ` : ""}${planText(p)}`;
+    const del = document.createElement("button");
+    del.className = "text-xs font-bold text-slate-400 px-2 py-1 shrink-0";
+    del.textContent = "削除";
+    del.addEventListener("click", () => deletePlan(p.id));
+    li.append(text, del);
+    return li;
+  }
 
   function renderPlan() {
-    const cal = cloud.calendar;
-    const show = !!(cloud.user && cal);
-    el.planCard.classList.toggle("hidden", !show);
-    if (!show) return;
+    const now = new Date();
+    const todayKey = dateKey(now);
+    const cal = cloud.user ? cloud.calendar : null;
+    const doneToday = getHistory().includes(todayKey);
+    const todays = plansOn(todayKey);
 
-    if (!cal.busy) {
-      el.planToday.textContent = "カレンダーを読み込み中…";
-      el.planNote.textContent = "連携してから最大15分ほどで、空き時間からプランを立てます";
-      el.planWeek.innerHTML = "";
-      el.planGoogleBtn.classList.add("hidden");
-      el.planIcsBtn.classList.add("hidden");
-      return;
-    }
+    // カレンダーの空き時間からのおすすめ（カレンダー連携中で、読み込み済みのとき）
+    currentPlan = cal?.busy ? buildStudyPlan(cal.busy, getProfile(), now) : [];
+    const suggestion = currentPlan[0]?.start ? currentPlan[0] : null;
 
-    const profile = getProfile();
-    currentPlan = buildStudyPlan(cal.busy, profile);
-    const today = currentPlan[0];
-    const doneToday = getHistory().includes(dateKey());
+    el.planTodayList.innerHTML = "";
+    todays.forEach((p) => el.planTodayList.append(planRow(p)));
+
     const timeText = (p) => `${formatClock(p.start)}〜${formatClock(p.end)}（${p.minutes}分）`;
-
+    let headline = "";
+    let note = "";
     if (doneToday) {
-      el.planToday.textContent = "今日はもう達成済み！🎉";
-      const tomorrow = currentPlan[1];
-      el.planNote.textContent = tomorrow?.start ? `明日は ${timeText(tomorrow)} があいています` : "";
-    } else if (today.start) {
-      el.planToday.textContent = `${timeText(today)} がおすすめ`;
-      el.planNote.textContent =
-        today.relaxed === "short"
+      note = "今日はもう達成済み！🎉";
+    } else if (todays.length) {
+      note = "予定の時間になったら、ちょいステップから始めよう";
+    } else if (suggestion) {
+      headline = `おすすめ：${timeText(suggestion)}`;
+      note =
+        suggestion.relaxed === "short"
           ? "今日は予定が多いので、5分だけでもOK"
-          : today.relaxed === "time"
+          : suggestion.relaxed === "time"
             ? "希望の時間帯は予定が入っているので、空いている時間にしました"
             : "カレンダーの空き時間から選びました";
+    } else if (cal && !cal.busy) {
+      headline = "カレンダーを読み込み中…";
+      note = "連携してから最大15分ほどで、空き時間からおすすめの時間を出します";
+    } else if (cal) {
+      headline = "今日はもう空き時間がなさそう";
+      note = "ちょいステップを1つだけでもOK";
     } else {
-      el.planToday.textContent = "今日はもう空き時間がなさそう";
-      el.planNote.textContent = "ちょいステップを1つだけでもOK。明日のプランは「7日分を見る」から";
+      headline = "今日の予定はまだありません";
+      note = "「＋ 予定を追加」で勉強する時間を決めよう（設定でカレンダーを連携すると、空き時間をおすすめします）";
     }
+    el.planToday.textContent = headline;
+    el.planToday.classList.toggle("hidden", !headline);
+    el.planNote.textContent = note;
+    el.planSuggestBtn.classList.toggle("hidden", !(suggestion && !todays.length && !doneToday));
 
+    // 7日分：予定があればそれを、なければおすすめを出す
     el.planWeek.innerHTML = "";
-    currentPlan.forEach((p, i) => {
+    for (let i = 0; i < PLAN_DAYS; i++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const key = dateKey(day);
       const li = document.createElement("li");
       li.className = "flex items-center justify-between gap-2 py-2";
-      const day = document.createElement("span");
-      day.className = "font-bold text-slate-700";
-      day.textContent = `${i === 0 ? "今日" : i === 1 ? "明日" : `${p.day.getMonth() + 1}/${p.day.getDate()}`}（${WEEKDAYS[p.day.getDay()]}）`;
-      const time = document.createElement("span");
-      time.className = p.start ? "text-slate-600" : "text-slate-400";
-      time.textContent = p.start ? timeText(p) : "空き時間なし";
-      li.append(day, time);
-      el.planWeek.append(li);
-    });
-
-    // カレンダーに入れるボタン：今日（達成済みなら明日）の予定
-    const target = (doneToday ? currentPlan[1] : today)?.start ? (doneToday ? currentPlan[1] : today) : currentPlan.find((p) => p.start);
-    el.planGoogleBtn.classList.toggle("hidden", !target);
-    el.planIcsBtn.classList.toggle("hidden", !currentPlan.some((p) => p.start));
-    if (target) el.planGoogleBtn.href = googleCalendarUrl(target);
-  }
-
-  // iCal / Google カレンダー用の日時（UTC）
-  function toIcsUtc(date) {
-    return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-  }
-
-  const PLAN_EVENT_TITLE = "📚 ちょいステップ（勉強）";
-  const APP_URL = "https://askedkazu.github.io/habit-app/";
-
-  function googleCalendarUrl(p) {
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: PLAN_EVENT_TITLE,
-      dates: `${toIcsUtc(p.start)}/${toIcsUtc(p.end)}`,
-      details: `今日のちょいステップ。机に座るだけでもOK！\n${APP_URL}`,
-    });
-    return `https://calendar.google.com/calendar/render?${params}`;
-  }
-
-  // 7日分のプランを .ics ファイルにして渡す（iPhone・Outlook などのカレンダーに入れられる）
-  function downloadPlanIcs() {
-    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//chotto-step//study-plan//JA", "CALSCALE:GREGORIAN"];
-    currentPlan
-      .filter((p) => p.start)
-      .forEach((p) => {
-        lines.push(
-          "BEGIN:VEVENT",
-          `UID:chotto-step-${dateKey(p.day)}@askedkazu.github.io`,
-          `DTSTAMP:${toIcsUtc(new Date())}`,
-          `DTSTART:${toIcsUtc(p.start)}`,
-          `DTEND:${toIcsUtc(p.end)}`,
-          `SUMMARY:${PLAN_EVENT_TITLE}`,
-          `DESCRIPTION:今日のちょいステップ。机に座るだけでもOK！\\n${APP_URL}`,
-          "BEGIN:VALARM",
-          "TRIGGER:-PT5M",
-          "ACTION:DISPLAY",
-          `DESCRIPTION:${PLAN_EVENT_TITLE}`,
-          "END:VALARM",
-          "END:VEVENT"
+      const label = document.createElement("span");
+      label.className = "font-bold text-slate-700 shrink-0";
+      label.textContent = `${i === 0 ? "今日" : i === 1 ? "明日" : `${day.getMonth() + 1}/${day.getDate()}`}（${WEEKDAYS[day.getDay()]}）`;
+      const right = document.createElement("span");
+      right.className = "text-right min-w-0";
+      const planned = plansOn(key);
+      const sug = currentPlan[i]?.start ? currentPlan[i] : null;
+      if (planned.length) {
+        right.className += " text-slate-800 font-bold truncate";
+        right.textContent = planned.map(planText).join(" / ");
+      } else if (sug) {
+        const add = document.createElement("button");
+        add.className = "link-btn";
+        add.textContent = `＋ ${formatClock(sug.start)}〜 に入れる`;
+        add.addEventListener("click", () =>
+          openPlanModal({ date: key, time: formatClock(sug.start).padStart(5, "0"), minutes: sug.minutes })
         );
+        right.append(add);
+      } else {
+        right.className += " text-slate-400";
+        right.textContent = cal?.busy ? "空き時間なし" : "予定なし";
+      }
+      li.append(label, right);
+      el.planWeek.append(li);
+    }
+  }
+
+  // 記録タブ：これからの予定
+  function renderUpcomingPlans() {
+    const today = dateKey();
+    const upcoming = getPlans().filter((p) => p.date >= today);
+    el.upcomingPlans.innerHTML = "";
+    if (upcoming.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty-note";
+      li.textContent = "予定はまだありません。勉強する時間を決めておくと続けやすくなります";
+      el.upcomingPlans.append(li);
+      return;
+    }
+    upcoming.forEach((p) => {
+      const li = planRow(p, { showDate: true });
+      li.classList.add("log-item");
+      el.upcomingPlans.append(li);
+    });
+  }
+
+  /* ---------- 予定を追加するシート ---------- */
+  const planDraft = { minutes: 15, book: "" };
+
+  function openPlanModal({ date, time, minutes } = {}) {
+    const profile = getProfile();
+    const suggestion = currentPlan.find((p) => p.start && dateKey(p.day) === (date || dateKey()));
+    el.planDate.value = date || dateKey();
+    el.planDate.min = dateKey();
+    el.planTime.value = time || (suggestion ? formatClock(suggestion.start).padStart(5, "0") : "20:00");
+    planDraft.minutes = minutes || profile.dailyTarget || 15;
+    planDraft.book = state.studyBook || "";
+    renderPlanModal();
+    el.planModal.classList.remove("hidden");
+  }
+
+  function closePlanModal() {
+    el.planModal.classList.add("hidden");
+  }
+
+  function renderPlanModal() {
+    el.planMinutesChips.querySelectorAll("[data-min]").forEach((b) =>
+      b.classList.toggle("selected", Number(b.dataset.min) === planDraft.minutes)
+    );
+    el.planBookList.innerHTML = "";
+    const books = getBooks();
+    if (books.length === 0) {
+      const p = document.createElement("p");
+      p.className = "text-sm text-slate-400";
+      p.textContent = "教材は、勉強の記録の画面で追加できます";
+      el.planBookList.append(p);
+    }
+    books.forEach((name) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `book-chip${planDraft.book === name ? " selected" : ""}`;
+      btn.textContent = name;
+      btn.addEventListener("click", () => {
+        planDraft.book = planDraft.book === name ? "" : name;
+        renderPlanModal();
       });
-    lines.push("END:VCALENDAR");
-    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "chotto-step-plan.ics";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      el.planBookList.append(btn);
+    });
+    checkPlanConflict();
+  }
+
+  // カレンダーの予定やほかの勉強の予定と重なっていたら知らせる（保存はできる）
+  function checkPlanConflict() {
+    const date = el.planDate.value;
+    const time = el.planTime.value;
+    let msg = "";
+    if (date && time) {
+      const start = planStart({ date, time }).getTime();
+      const end = start + planDraft.minutes * 60000;
+      const busy = cloud.user ? cloud.calendar?.busy || [] : [];
+      if (busy.some((b) => start < b.e && end > b.s)) msg = "⚠️ カレンダーの予定と重なっています";
+      else if (plansOn(date).some((p) => start < planStart(p).getTime() + p.minutes * 60000 && end > planStart(p).getTime()))
+        msg = "⚠️ ほかの勉強の予定と重なっています";
+    }
+    el.planConflict.textContent = msg;
+    el.planConflict.classList.toggle("hidden", !msg);
+    el.planSaveBtn.disabled = !date || !time;
+  }
+
+  function savePlanFromModal() {
+    const date = el.planDate.value;
+    const time = el.planTime.value;
+    if (!date || !time) return;
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    savePlans([...getPlans(), { id, date, time, minutes: planDraft.minutes, book: planDraft.book }]);
+    closePlanModal();
+    renderStats();
+  }
+
+  function initPlans() {
+    el.planAddBtn.addEventListener("click", () => openPlanModal());
+    el.recordAddPlanBtn.addEventListener("click", () => openPlanModal());
+    el.planSuggestBtn.addEventListener("click", () => {
+      const s0 = currentPlan[0];
+      if (s0?.start) openPlanModal({ date: dateKey(), time: formatClock(s0.start).padStart(5, "0"), minutes: s0.minutes });
+    });
+    el.planCloseBtn.addEventListener("click", closePlanModal);
+    el.planModal.addEventListener("click", (e) => e.target === el.planModal && closePlanModal());
+    el.planMinutesChips.querySelectorAll("[data-min]").forEach((b) =>
+      b.addEventListener("click", () => {
+        planDraft.minutes = Number(b.dataset.min);
+        renderPlanModal();
+      })
+    );
+    el.planDate.addEventListener("change", checkPlanConflict);
+    el.planTime.addEventListener("change", checkPlanConflict);
+    el.planSaveBtn.addEventListener("click", savePlanFromModal);
   }
 
   /* ==========================================================
@@ -1395,7 +1541,7 @@
     }
 
     renderLogList(el.recentLogs, getLogs().reverse().slice(0, 3));
-    if (cloud.calendar) renderPlan(); // 達成したらプランの表示も変える
+    renderPlan();
   }
 
   // 記録の一覧（新しい順）を描画する
@@ -1473,11 +1619,13 @@
       if (set.has(key)) cell.classList.add("done");
       if (key === dateKey(now)) cell.classList.add("today");
       if (d > now) cell.classList.add("future");
+      if (plansOn(key).length) cell.classList.add("planned"); // 勉強の予定がある日
       cell.textContent = day;
       el.calGrid.append(cell);
     }
 
     renderBookTotals();
+    renderUpcomingPlans();
 
     el.badgeGrid.innerHTML = "";
     BADGES.forEach((b) => el.badgeGrid.append(badgeTile(b, !badgeProgress(b, history).earned)));
@@ -2940,6 +3088,7 @@
     initQuiz();
     initRecord();
     initStudy();
+    initPlans();
     initOnboarding();
     initTabs();
     if (isStandalone()) {
