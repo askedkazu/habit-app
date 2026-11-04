@@ -49,6 +49,8 @@
           <span id="todayChip" class="today-chip">まだ</span>
         </div>
 
+        <p id="homeGoal" class="hidden text-sm font-bold mt-2 bg-white/20 rounded-lg px-3 py-1.5 truncate"></p>
+
         <div class="flex items-end gap-2 mt-4">
           <span class="text-4xl leading-none">🔥</span>
           <span id="streakCount" class="text-5xl font-extrabold leading-none tabular-nums">0</span>
@@ -65,6 +67,15 @@
       <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
         今日のちょいステップを始める
       </button>
+
+      <!-- 悩みに合わせた今日のヒント -->
+      <section id="tipCard" class="card mt-4 flex items-start gap-3">
+        <div class="text-2xl leading-none">💡</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-bold text-slate-500">今日のヒント</p>
+          <p id="tipText" class="text-sm text-slate-700 mt-0.5"></p>
+        </div>
+      </section>
 
       <!-- ログインのおすすめ（ログイン機能があって未ログインのとき） -->
       <section id="homeLoginNudge" class="hidden card mt-4 flex items-center gap-3">
@@ -169,6 +180,15 @@
         <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
       </section>
 
+      <!-- プロフィール（最初のアンケートの答え） -->
+      <section class="card">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-sm font-bold">👤 あなたについて</p>
+          <button id="editProfileBtn" class="link-btn">答え直す</button>
+        </div>
+        <dl id="profileSummary" class="text-sm mt-2 space-y-1"></dl>
+      </section>
+
       <!-- リマインド通知（ログイン中かつ通知の設定があるときだけ表示） -->
       <section id="notifyCard" class="hidden card">
         <div class="flex items-center justify-between gap-3">
@@ -223,6 +243,22 @@
       </section>
 
       <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
+    </main>
+
+    <!-- =====================================================
+         はじめてのアンケート（中身は app.js の ONBOARDING_PAGES から作る）
+         ===================================================== -->
+    <main id="tabOnboarding" class="tab hidden px-4 pb-10 pt-3">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="progress flex-1"><div id="obBar" class="progress-bar" style="width:25%"></div></div>
+        <button id="obSkipBtn" class="text-xs font-bold text-slate-400 whitespace-nowrap">あとで</button>
+      </div>
+      <section id="obPage" class="card screen"></section>
+      <div class="flex gap-2 mt-4">
+        <button id="obBackBtn" class="btn-ghost px-5">戻る</button>
+        <button id="obNextBtn" class="btn-primary flex-1 py-3 text-base">次へ</button>
+      </div>
+      <p class="text-center text-xs text-slate-400 mt-4">答えはあなたのアカウントにだけ保存され、他の人には見えません</p>
     </main>
 
     <!-- =====================================================

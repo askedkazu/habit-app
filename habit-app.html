@@ -498,6 +498,8 @@ body {
           <span id="todayChip" class="today-chip">まだ</span>
         </div>
 
+        <p id="homeGoal" class="hidden text-sm font-bold mt-2 bg-white/20 rounded-lg px-3 py-1.5 truncate"></p>
+
         <div class="flex items-end gap-2 mt-4">
           <span class="text-4xl leading-none">🔥</span>
           <span id="streakCount" class="text-5xl font-extrabold leading-none tabular-nums">0</span>
@@ -514,6 +516,15 @@ body {
       <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
         今日のちょいステップを始める
       </button>
+
+      <!-- 悩みに合わせた今日のヒント -->
+      <section id="tipCard" class="card mt-4 flex items-start gap-3">
+        <div class="text-2xl leading-none">💡</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-bold text-slate-500">今日のヒント</p>
+          <p id="tipText" class="text-sm text-slate-700 mt-0.5"></p>
+        </div>
+      </section>
 
       <!-- ログインのおすすめ（ログイン機能があって未ログインのとき） -->
       <section id="homeLoginNudge" class="hidden card mt-4 flex items-center gap-3">
@@ -618,6 +629,15 @@ body {
         <button id="logoutBtn" class="hidden btn-ghost text-sm whitespace-nowrap">ログアウト</button>
       </section>
 
+      <!-- プロフィール（最初のアンケートの答え） -->
+      <section class="card">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-sm font-bold">👤 あなたについて</p>
+          <button id="editProfileBtn" class="link-btn">答え直す</button>
+        </div>
+        <dl id="profileSummary" class="text-sm mt-2 space-y-1"></dl>
+      </section>
+
       <!-- リマインド通知（ログイン中かつ通知の設定があるときだけ表示） -->
       <section id="notifyCard" class="hidden card">
         <div class="flex items-center justify-between gap-3">
@@ -672,6 +692,22 @@ body {
       </section>
 
       <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
+    </main>
+
+    <!-- =====================================================
+         はじめてのアンケート（中身は app.js の ONBOARDING_PAGES から作る）
+         ===================================================== -->
+    <main id="tabOnboarding" class="tab hidden px-4 pb-10 pt-3">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="progress flex-1"><div id="obBar" class="progress-bar" style="width:25%"></div></div>
+        <button id="obSkipBtn" class="text-xs font-bold text-slate-400 whitespace-nowrap">あとで</button>
+      </div>
+      <section id="obPage" class="card screen"></section>
+      <div class="flex gap-2 mt-4">
+        <button id="obBackBtn" class="btn-ghost px-5">戻る</button>
+        <button id="obNextBtn" class="btn-primary flex-1 py-3 text-base">次へ</button>
+      </div>
+      <p class="text-center text-xs text-slate-400 mt-4">答えはあなたのアカウントにだけ保存され、他の人には見えません</p>
     </main>
 
     <!-- =====================================================
@@ -918,6 +954,7 @@ window.FIREBASE_VAPID_KEY =
     history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
     logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
     books: "habitApp.books", // 登録した教材名の配列
+    profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
   };
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
@@ -1040,6 +1077,16 @@ window.FIREBASE_VAPID_KEY =
     timerBtn: $("timerBtn"),
     studyNextBtn: $("studyNextBtn"),
     homeStudyTime: $("homeStudyTime"),
+    homeGoal: $("homeGoal"),
+    tipText: $("tipText"),
+    // プロフィール・アンケート
+    editProfileBtn: $("editProfileBtn"),
+    profileSummary: $("profileSummary"),
+    obBar: $("obBar"),
+    obSkipBtn: $("obSkipBtn"),
+    obPage: $("obPage"),
+    obBackBtn: $("obBackBtn"),
+    obNextBtn: $("obNextBtn"),
     bookTotals: $("bookTotals"),
     // STEP1
     shortStepList: $("shortStepList"),
@@ -1386,6 +1433,8 @@ window.FIREBASE_VAPID_KEY =
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
+        // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
+        if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
         writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
@@ -1412,6 +1461,7 @@ window.FIREBASE_VAPID_KEY =
       model: storage.get(STORAGE_KEYS.model, ""),
       customSteps: storage.getJSON(STORAGE_KEYS.customSteps, []),
       books: getBooks(),
+      profile: getProfile(),
       updatedAt: serverTimestamp(),
     };
     // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
@@ -1453,7 +1503,10 @@ window.FIREBASE_VAPID_KEY =
     updateApiKeyStatus();
     renderShortSteps();
     renderBookList();
+    renderProfileSummary();
     renderStats();
+    // ログインしたらアカウントに答えがあった → アンケートは閉じる
+    if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab("home");
   }
 
   /* ==========================================================
@@ -1746,7 +1799,14 @@ window.FIREBASE_VAPID_KEY =
     const weekStart = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)));
     const todayMin = logs.filter((l) => l.date === dateKey(now)).reduce((sum, l) => sum + (l.minutes || 0), 0);
     const weekMin = logs.filter((l) => l.date >= weekStart).reduce((sum, l) => sum + (l.minutes || 0), 0);
-    el.homeStudyTime.textContent = `⏱ 今日 ${formatMinutes(todayMin)} ・ 今週 ${formatMinutes(weekMin)}`;
+    const profile = getProfile();
+    const target = profile.dailyTarget || 0;
+    el.homeStudyTime.textContent = target
+      ? `⏱ 今日 ${todayMin} / ${target}分${todayMin >= target ? " 達成！" : ""} ・ 今週 ${formatMinutes(weekMin)}`
+      : `⏱ 今日 ${formatMinutes(todayMin)} ・ 今週 ${formatMinutes(weekMin)}`;
+    el.homeGoal.classList.toggle("hidden", !profile.goal);
+    el.homeGoal.textContent = profile.goal ? `🎯 ${profile.goal}` : "";
+    el.tipText.textContent = todaysTip(profile, now);
 
     // 今週（月曜はじまり）の達成
     el.weekRow.innerHTML = "";
@@ -2228,8 +2288,16 @@ window.FIREBASE_VAPID_KEY =
 
   // 教材が選ばれていれば、問題作りの参考としてAIに伝える
   function buildQuizPrompt() {
-    if (!state.studyBook) return QUIZ_PROMPT;
-    return `${QUIZ_PROMPT}\n\n参考：ユーザーが勉強している教材は「${state.studyBook}」です。写真の内容を優先し、教材名はテーマの推測に使ってください。`;
+    const notes = [];
+    if (state.studyBook) {
+      notes.push(`ユーザーが勉強している教材は「${state.studyBook}」です。写真の内容を優先し、教材名はテーマの推測に使ってください。`);
+    }
+    // アンケートの答えから、問題の難しさや言葉づかいを合わせる
+    const { status, age, purposes } = getProfile();
+    const who = [status, age && `${age}`].filter(Boolean).join("・");
+    if (who) notes.push(`ユーザーは「${who}」です。問題の難しさと言葉づかいをそれに合わせてください。`);
+    if (purposes?.length) notes.push(`勉強の目的は「${purposes.join("、")}」です。`);
+    return notes.length ? `${QUIZ_PROMPT}\n\n参考：\n- ${notes.join("\n- ")}` : QUIZ_PROMPT;
   }
 
   /**
@@ -2902,6 +2970,208 @@ window.FIREBASE_VAPID_KEY =
   }
 
   /* ==========================================================
+   * はじめてのアンケート（プロフィール）
+   * ----------------------------------------------------------
+   * 立場・年代・目的・目標・悩み・1日の目標時間を聞き、
+   * ホームの目標表示・今日のヒント・AIの問題の難しさに使う。
+   * どの質問も飛ばせる。設定タブから答え直せる。
+   * ========================================================== */
+  const ONBOARDING_PAGES = [
+    {
+      title: "まずは、あなたのことを教えてください",
+      sub: "問題の難しさや声かけを、あなたに合わせます",
+      fields: [
+        { key: "status", label: "今の立場", type: "single", options: ["中学生", "高校生", "浪人生", "大学生・専門学生", "社会人", "その他"] },
+        { key: "age", label: "年代", type: "single", options: ["〜15歳", "16〜18歳", "19〜22歳", "23〜29歳", "30代", "40代以上"] },
+      ],
+    },
+    {
+      title: "何のために勉強していますか？",
+      sub: "いくつでも選べます",
+      fields: [
+        { key: "purposes", label: "目的", type: "multi", options: ["受験・入試", "資格・検定", "学校の授業・定期テスト", "語学", "仕事のスキルアップ", "趣味・教養"] },
+        { key: "goal", label: "目標（任意）", type: "text", placeholder: "例：3月の英検2級に合格する", maxLength: 40 },
+      ],
+    },
+    {
+      title: "勉強の悩みはありますか？",
+      sub: "あなたに合ったヒントを毎日お届けします",
+      fields: [
+        {
+          key: "worries",
+          label: "悩み（いくつでも）",
+          type: "multi",
+          options: ["続かない・三日坊主", "やる気が出ない", "ついスマホを触ってしまう", "勉強する時間がない", "何から始めればいいか分からない", "集中できない", "覚えてもすぐ忘れる"],
+        },
+        { key: "worryNote", label: "そのほか（任意）", type: "text", placeholder: "自由に書いてOK", maxLength: 100 },
+      ],
+    },
+    {
+      title: "1日どれくらい勉強したいですか？",
+      sub: "まずは少なめがおすすめ。ちょいステップは5分からでOK！",
+      fields: [
+        {
+          key: "dailyTarget",
+          label: "1日の目標時間",
+          type: "single",
+          options: [5, 10, 15, 30, 60, 90],
+          format: (v) => `${v}分`,
+        },
+      ],
+    },
+  ];
+
+  // 悩みに合わせたヒント（選んだ悩みの中から日替わりで出す）
+  const TIPS = {
+    "続かない・三日坊主": "まずは「机に座るだけ」でOK。連続記録が伸びるほど、続けたくなります🔥",
+    "やる気が出ない": "やる気は、始めてから出てくるもの。まずは5分だけタイマーを回してみよう",
+    "ついスマホを触ってしまう": "勉強中はスマホを別の部屋へ。ちょいステップの「スマホを手の届かない場所に置いた」から始めよう",
+    "勉強する時間がない": "1日5分でも、1か月で2時間半。すき間時間に1ページだけ開いてみよう",
+    "何から始めればいいか分からない": "手元の教材を1ページ開いて撮るだけ。AIがそのページの確認テストを作ります",
+    "集中できない": "15分だけ、と区切るのがコツ。短く区切るほど集中しやすくなります",
+    "覚えてもすぐ忘れる": "思い出す練習が一番の記憶法。確認テストで間違えた問題は、解説を読み直そう",
+  };
+  const DEFAULT_TIP = "今日の一歩は小さくてOK。続けることが一番の近道です";
+
+  function todaysTip(profile, now) {
+    const tips = (profile.worries || []).map((w) => TIPS[w]).filter(Boolean);
+    if (tips.length === 0) return DEFAULT_TIP;
+    const dayNumber = Math.floor(parseDateKey(dateKey(now)) / 86400000);
+    return tips[dayNumber % tips.length];
+  }
+
+  function getProfile() {
+    return storage.getJSON(STORAGE_KEYS.profile, {}) || {};
+  }
+
+  const onboarding = { page: 0, draft: {} };
+
+  function openOnboarding() {
+    onboarding.page = 0;
+    onboarding.draft = { ...getProfile() };
+    showTab("onboarding");
+    renderOnboardingPage();
+  }
+
+  // 答えを保存してホームへ（「あとで」でも、それまでの答えは保存する）
+  function finishOnboarding() {
+    storage.setJSON(STORAGE_KEYS.profile, { ...onboarding.draft, done: true, answeredAt: Date.now() });
+    renderProfileSummary();
+    renderStats();
+    showTab("home");
+  }
+
+  function renderOnboardingPage() {
+    const page = ONBOARDING_PAGES[onboarding.page];
+    const isLast = onboarding.page === ONBOARDING_PAGES.length - 1;
+    el.obBar.style.width = `${((onboarding.page + 1) / ONBOARDING_PAGES.length) * 100}%`;
+    el.obBackBtn.classList.toggle("hidden", onboarding.page === 0);
+    el.obNextBtn.textContent = isLast ? "はじめる！" : "次へ";
+
+    el.obPage.innerHTML = "";
+    // 画面切り替えのアニメーションをもう一度再生する
+    el.obPage.classList.remove("screen");
+    void el.obPage.offsetWidth;
+    el.obPage.classList.add("screen");
+
+    const title = document.createElement("h2");
+    title.className = "font-bold text-lg";
+    title.textContent = page.title;
+    const sub = document.createElement("p");
+    sub.className = "text-sm text-slate-500 mb-4";
+    sub.textContent = page.sub;
+    el.obPage.append(title, sub);
+
+    page.fields.forEach((field) => {
+      const label = document.createElement("p");
+      label.className = "field-label mt-4";
+      label.textContent = field.label;
+      el.obPage.append(label);
+
+      if (field.type === "text") {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "input w-full";
+        input.placeholder = field.placeholder || "";
+        input.maxLength = field.maxLength || 100;
+        input.value = onboarding.draft[field.key] || "";
+        input.addEventListener("input", () => {
+          onboarding.draft[field.key] = input.value.trim();
+        });
+        el.obPage.append(input);
+        return;
+      }
+
+      const wrap = document.createElement("div");
+      wrap.className = "flex flex-wrap gap-2";
+      field.options.forEach((option) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const current = onboarding.draft[field.key];
+        const selected = field.type === "multi" ? (current || []).includes(option) : current === option;
+        btn.className = `book-chip${selected ? " selected" : ""}`;
+        btn.textContent = field.format ? field.format(option) : option;
+        btn.addEventListener("click", () => {
+          if (field.type === "multi") {
+            const list = new Set(onboarding.draft[field.key] || []);
+            list.has(option) ? list.delete(option) : list.add(option);
+            onboarding.draft[field.key] = [...list];
+          } else {
+            // もう一度押すと選択を外せる
+            onboarding.draft[field.key] = current === option ? undefined : option;
+          }
+          renderOnboardingPage();
+        });
+        wrap.append(btn);
+      });
+      el.obPage.append(wrap);
+    });
+  }
+
+  // 設定タブ：答えの一覧
+  function renderProfileSummary() {
+    const p = getProfile();
+    const rows = [
+      ["立場", [p.status, p.age].filter(Boolean).join("・")],
+      ["目的", (p.purposes || []).join("、")],
+      ["目標", p.goal],
+      ["悩み", (p.worries || []).join("、")],
+      ["1日の目標", p.dailyTarget ? `${p.dailyTarget}分` : ""],
+    ];
+    el.profileSummary.innerHTML = "";
+    rows.forEach(([key, value]) => {
+      const row = document.createElement("div");
+      row.className = "flex gap-3";
+      const dt = document.createElement("dt");
+      dt.className = "w-20 shrink-0 text-slate-500";
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.className = value ? "text-slate-700" : "text-slate-400";
+      dd.textContent = value || "未回答";
+      row.append(dt, dd);
+      el.profileSummary.append(row);
+    });
+  }
+
+  function initOnboarding() {
+    el.obNextBtn.addEventListener("click", () => {
+      if (onboarding.page < ONBOARDING_PAGES.length - 1) {
+        onboarding.page++;
+        renderOnboardingPage();
+      } else {
+        finishOnboarding();
+      }
+    });
+    el.obBackBtn.addEventListener("click", () => {
+      onboarding.page = Math.max(0, onboarding.page - 1);
+      renderOnboardingPage();
+    });
+    el.obSkipBtn.addEventListener("click", finishOnboarding);
+    el.editProfileBtn.addEventListener("click", openOnboarding);
+    renderProfileSummary();
+  }
+
+  /* ==========================================================
    * タブ（ホーム / 記録 / 設定）と記録の流れ
    * ========================================================== */
   const TABS = {
@@ -2909,14 +3179,15 @@ window.FIREBASE_VAPID_KEY =
     record: { node: $("tabRecord"), title: "記録" },
     settings: { node: $("tabSettings"), title: "設定" },
     flow: { node: $("tabFlow"), title: "今日のちょいステップ" },
+    onboarding: { node: $("tabOnboarding"), title: "はじめに" },
   };
 
   function showTab(name) {
     Object.entries(TABS).forEach(([key, tab]) => tab.node.classList.toggle("hidden", key !== name));
     el.headerTitle.textContent = TABS[name].title;
-    // 記録の流れの間はタブバーを隠し、左上に「閉じる」を出す
+    // 記録の流れとアンケートの間はタブバーを隠す。記録の流れでは左上に「閉じる」を出す
     const inFlow = name === "flow";
-    el.tabBar.classList.toggle("hidden", inFlow);
+    el.tabBar.classList.toggle("hidden", inFlow || name === "onboarding");
     el.flowCloseBtn.classList.toggle("hidden", !inFlow);
     el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
     if (name === "record") renderRecord();
@@ -2947,6 +3218,7 @@ window.FIREBASE_VAPID_KEY =
     initQuiz();
     initRecord();
     initStudy();
+    initOnboarding();
     initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");
@@ -2956,6 +3228,8 @@ window.FIREBASE_VAPID_KEY =
     renderStats();
     showScreen(1);
     showTab("home");
+    // はじめて開いたときはアンケートから
+    if (!getProfile().done) openOnboarding();
     initCloud();
   }
 
