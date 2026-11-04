@@ -20,7 +20,8 @@
   const STORAGE_KEYS = {
     apiKey: "habitApp.geminiApiKey",
     model: "habitApp.geminiModel",
-    customSteps: "habitApp.customSteps",
+    customSteps: "habitApp.customSteps", // 旧形式：既定のステップに追加した分だけ（steps がないときに読む）
+    steps: "habitApp.steps", // 自分のちょいステップの一覧（既定のものも含む全部）
     history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
     logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
     books: "habitApp.books", // 登録した教材名の配列
@@ -49,12 +50,25 @@
   const MAX_IMAGE_SIZE = 1280;
 
   // デフォルトの超低ハードルなステップ
+  // （証拠写真をスマホで撮るので、「スマホを遠ざける」系ではなく集中モードにしている）
   const DEFAULT_STEPS = [
     "机に座った",
     "教科書・ノートを出した",
     "本を1ページ開いた",
-    "スマホを手の届かない場所に置いた",
+    "スマホの集中モードをオンにした",
     "1行だけ読んだ／書いた",
+  ];
+
+  // アンケートで選べるちょいステップの候補
+  const STEP_CANDIDATES = [
+    ...DEFAULT_STEPS,
+    "ペンを持った",
+    "前回の続きのページを開いた",
+    "単語を1つだけ覚えた",
+    "問題を1問だけ解いた",
+    "タイマーを5分セットした",
+    "飲み物を用意した",
+    "机の上を片づけた",
   ];
 
   // APIキー無しで動作確認できるデモ用の問題
@@ -503,6 +517,8 @@
         writeLocal(STORAGE_KEYS.apiKey, d.apiKey || null);
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
+        // アカウントにまだ一覧がなければ、この端末の一覧を残す（次の保存でアカウントへ）
+        if (d.steps?.length) writeLocal(STORAGE_KEYS.steps, JSON.stringify(d.steps));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
@@ -531,6 +547,7 @@
       apiKey: storage.get(STORAGE_KEYS.apiKey, ""),
       model: storage.get(STORAGE_KEYS.model, ""),
       customSteps: storage.getJSON(STORAGE_KEYS.customSteps, []),
+      steps: getAllSteps(),
       books: getBooks(),
       profile: getProfile(),
       updatedAt: serverTimestamp(),
@@ -1030,7 +1047,15 @@
    * STEP1: ショートステップ
    * ========================================================== */
   function getAllSteps() {
+    const steps = storage.getJSON(STORAGE_KEYS.steps, null);
+    if (Array.isArray(steps) && steps.length) return steps;
+    // まだ一覧を保存していない（以前のバージョンから使っている）なら、既定＋追加した分
     return [...DEFAULT_STEPS, ...storage.getJSON(STORAGE_KEYS.customSteps, [])];
+  }
+
+  function saveSteps(steps) {
+    const unique = [...new Set(steps.map((x) => x.trim()).filter(Boolean))];
+    if (unique.length) storage.setJSON(STORAGE_KEYS.steps, unique);
   }
 
   function renderShortSteps() {
@@ -1056,18 +1081,11 @@
     renderCustomStepList();
   }
 
-  // 設定タブ：自分で追加したステップの一覧（削除できる）
+  // 設定タブ：ちょいステップの一覧（削除できる。最後の1つは消せない）
   function renderCustomStepList() {
-    const custom = storage.getJSON(STORAGE_KEYS.customSteps, []);
+    const steps = getAllSteps();
     el.customStepList.innerHTML = "";
-    if (custom.length === 0) {
-      const li = document.createElement("li");
-      li.className = "text-sm text-slate-400 py-2";
-      li.textContent = "まだありません";
-      el.customStepList.append(li);
-      return;
-    }
-    custom.forEach((text, i) => {
+    steps.forEach((text, i) => {
       const li = document.createElement("li");
       li.className = "flex items-center justify-between gap-2 py-2";
       const span = document.createElement("span");
@@ -1076,10 +1094,12 @@
       const del = document.createElement("button");
       del.className = "text-xs font-bold text-rose-500 px-2 py-1";
       del.textContent = "削除";
+      del.disabled = steps.length <= 1;
+      if (del.disabled) del.classList.add("opacity-30");
       del.addEventListener("click", () => {
-        const next = storage.getJSON(STORAGE_KEYS.customSteps, []);
+        const next = getAllSteps();
         next.splice(i, 1);
-        storage.setJSON(STORAGE_KEYS.customSteps, next);
+        saveSteps(next);
         renderShortSteps();
       });
       li.append(span, del);
@@ -1103,9 +1123,7 @@
       e.preventDefault();
       const text = el.newStepInput.value.trim();
       if (!text) return;
-      const custom = storage.getJSON(STORAGE_KEYS.customSteps, []);
-      custom.push(text);
-      storage.setJSON(STORAGE_KEYS.customSteps, custom);
+      saveSteps([...getAllSteps(), text]);
       el.newStepInput.value = "";
       renderShortSteps();
     });
@@ -2147,13 +2165,18 @@
         { key: "worryNote", label: "そのほか（任意）", type: "text", placeholder: "自由に書いてOK", maxLength: 100 },
       ],
     },
+    {
+      title: "あなたのちょいステップを選ぼう",
+      sub: "やる気がなくてもできる、小さな一歩を選んでね。毎回この中から1つでもできればOK（あとで変えられます）",
+      fields: [{ key: "steps", label: "ちょいステップ（いくつでも）", type: "steps" }],
+    },
   ];
 
   // 悩みに合わせたヒント（選んだ悩みの中から日替わりで出す）
   const TIPS = {
     "続かない・三日坊主": "まずは「机に座るだけ」でOK。連続記録が伸びるほど、続けたくなります🔥",
     "やる気が出ない": "やる気は、始めてから出てくるもの。まずは5分だけタイマーを回してみよう",
-    "ついスマホを触ってしまう": "勉強中はスマホを別の部屋へ。ちょいステップの「スマホを手の届かない場所に置いた」から始めよう",
+    "ついスマホを触ってしまう": "勉強の前にスマホの集中モードをオンに。通知が来なければ、写真を撮るとき以外は触らずにすみます",
     "勉強する時間がない": "1日5分でも、1か月で2時間半。すき間時間に1ページだけ開いてみよう",
     "何から始めればいいか分からない": "手元の教材を1ページ開いて撮るだけ。AIがそのページの確認テストを作ります",
     "集中できない": "15分だけ、と区切るのがコツ。短く区切るほど集中しやすくなります",
@@ -2190,7 +2213,8 @@
   // editing: 設定から答え直すとき（最後のボタンが「保存する」になる）
   function openOnboarding({ editing = false } = {}) {
     onboarding.page = 0;
-    onboarding.draft = { ...getProfile() };
+    // ちょいステップはプロフィールとは別に保存しているので、今の一覧を選んだ状態で開く
+    onboarding.draft = { ...getProfile(), steps: getAllSteps() };
     onboarding.editing = editing;
     showTab("onboarding");
     renderOnboardingPage({ newPage: true });
@@ -2198,7 +2222,10 @@
 
   // 答えを保存してホームへ（「あとで」でも、それまでの答えは保存する）
   function finishOnboarding() {
-    storage.setJSON(STORAGE_KEYS.profile, { ...onboarding.draft, done: true, answeredAt: Date.now() });
+    const { steps, ...profile } = onboarding.draft;
+    if (steps?.length) saveSteps(steps); // 全部外した場合は、今までのステップのまま
+    storage.setJSON(STORAGE_KEYS.profile, { ...profile, done: true, answeredAt: Date.now() });
+    renderShortSteps();
     renderProfileSummary();
     renderStats();
     showTab("home");
@@ -2256,6 +2283,51 @@
         note.className = "text-xs text-slate-500 -mt-1 mb-2";
         note.textContent = field.note;
         el.obPage.append(note);
+      }
+
+      if (field.type === "steps") {
+        // 候補＋自分で追加したもの。選んだ順ではなく、候補の順→自分で追加した順に並べる
+        const selected = draft.steps || [];
+        const all = [...new Set([...STEP_CANDIDATES, ...selected])];
+        const wrap = document.createElement("div");
+        wrap.className = "flex flex-wrap gap-2";
+        all.forEach((option) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `book-chip${selected.includes(option) ? " selected" : ""}`;
+          btn.textContent = option;
+          btn.addEventListener("click", () => {
+            draft.steps = selected.includes(option) ? selected.filter((x) => x !== option) : [...selected, option];
+            renderOnboardingPage();
+          });
+          wrap.append(btn);
+        });
+        const form = document.createElement("form");
+        form.className = "flex gap-2 mt-3";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.maxLength = 30;
+        input.className = "input flex-1 min-w-0";
+        input.placeholder = "自分で書いて追加（例：問題集を机に置いた）";
+        const add = document.createElement("button");
+        add.type = "submit";
+        add.className = "btn-ghost text-sm";
+        add.textContent = "追加";
+        form.append(input, add);
+        form.addEventListener("submit", (e) => {
+          e.preventDefault();
+          const text = input.value.trim();
+          if (!text) return;
+          draft.steps = [...new Set([...selected, text])];
+          renderOnboardingPage();
+        });
+        const hint = document.createElement("p");
+        hint.className = `text-xs mt-2 ${selected.length ? "text-slate-400" : "text-rose-500"}`;
+        hint.textContent = selected.length
+          ? `${selected.length}個えらんでいます`
+          : "1つも選ばないと、今までのステップのままになります";
+        el.obPage.append(wrap, form, hint);
+        return;
       }
 
       if (field.type === "date") {
