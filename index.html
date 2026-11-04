@@ -223,6 +223,31 @@
           </div>
           <input id="notifyTime" type="time" value="20:00" step="300" class="input w-auto px-2 py-1" />
         </div>
+        <!-- まだ勉強していないときの送り直し・予定の前のお知らせ（全端末共通） -->
+        <div id="notifyOptions" class="mt-3 space-y-3">
+          <div>
+            <p class="text-xs font-bold text-slate-600 mb-1">まだ勉強していなかったら、もう一度知らせる</p>
+            <div id="notifyRepeatChips" class="flex flex-wrap gap-2">
+              <button type="button" class="book-chip" data-repeat="0">知らせない</button>
+              <button type="button" class="book-chip" data-repeat="30">30分ごと</button>
+              <button type="button" class="book-chip" data-repeat="60">1時間ごと</button>
+              <button type="button" class="book-chip" data-repeat="120">2時間ごと</button>
+            </div>
+          </div>
+          <div id="notifyMaxRow">
+            <p class="text-xs font-bold text-slate-600 mb-1">1日に知らせる回数（最大）</p>
+            <div id="notifyMaxChips" class="flex flex-wrap gap-2">
+              <button type="button" class="book-chip" data-max="2">2回</button>
+              <button type="button" class="book-chip" data-max="3">3回</button>
+              <button type="button" class="book-chip" data-max="5">5回</button>
+            </div>
+          </div>
+          <label class="flex items-center justify-between gap-3 text-sm">
+            <span class="font-bold text-slate-700">勉強の予定の前にも知らせる<span class="block text-xs font-normal text-slate-500">予定の開始15分前ごろ</span></span>
+            <input id="notifyPlansToggle" type="checkbox" class="w-5 h-5 accent-sky-500" checked />
+          </label>
+          <p class="text-xs text-slate-400">勉強した日は、それ以降は知らせません。23時以降は送り直しません。</p>
+        </div>
         <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
         <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
       </section>

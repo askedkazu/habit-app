@@ -728,6 +728,31 @@ body {
           </div>
           <input id="notifyTime" type="time" value="20:00" step="300" class="input w-auto px-2 py-1" />
         </div>
+        <!-- まだ勉強していないときの送り直し・予定の前のお知らせ（全端末共通） -->
+        <div id="notifyOptions" class="mt-3 space-y-3">
+          <div>
+            <p class="text-xs font-bold text-slate-600 mb-1">まだ勉強していなかったら、もう一度知らせる</p>
+            <div id="notifyRepeatChips" class="flex flex-wrap gap-2">
+              <button type="button" class="book-chip" data-repeat="0">知らせない</button>
+              <button type="button" class="book-chip" data-repeat="30">30分ごと</button>
+              <button type="button" class="book-chip" data-repeat="60">1時間ごと</button>
+              <button type="button" class="book-chip" data-repeat="120">2時間ごと</button>
+            </div>
+          </div>
+          <div id="notifyMaxRow">
+            <p class="text-xs font-bold text-slate-600 mb-1">1日に知らせる回数（最大）</p>
+            <div id="notifyMaxChips" class="flex flex-wrap gap-2">
+              <button type="button" class="book-chip" data-max="2">2回</button>
+              <button type="button" class="book-chip" data-max="3">3回</button>
+              <button type="button" class="book-chip" data-max="5">5回</button>
+            </div>
+          </div>
+          <label class="flex items-center justify-between gap-3 text-sm">
+            <span class="font-bold text-slate-700">勉強の予定の前にも知らせる<span class="block text-xs font-normal text-slate-500">予定の開始15分前ごろ</span></span>
+            <input id="notifyPlansToggle" type="checkbox" class="w-5 h-5 accent-sky-500" checked />
+          </label>
+          <p class="text-xs text-slate-400">勉強した日は、それ以降は知らせません。23時以降は送り直しません。</p>
+        </div>
         <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
         <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
       </section>
@@ -1336,6 +1361,10 @@ window.FIREBASE_VAPID_KEY =
     notifyTime: $("notifyTime"),
     notifyOnBtn: $("notifyOnBtn"),
     notifyOffBtn: $("notifyOffBtn"),
+    notifyRepeatChips: $("notifyRepeatChips"),
+    notifyMaxRow: $("notifyMaxRow"),
+    notifyMaxChips: $("notifyMaxChips"),
+    notifyPlansToggle: $("notifyPlansToggle"),
     errorMsg: $("errorMsg"),
     // STEP3
     quizProgress: $("quizProgress"),
@@ -1768,6 +1797,7 @@ window.FIREBASE_VAPID_KEY =
     try {
       const snap = await cloud.fsMod.getDoc(userDocRef());
       cloud.notifyTime = null; // 別のアカウントの設定が残らないようにする
+      cloud.notifyPrefs = {};
       if (snap.exists()) {
         const d = snap.data();
         writeLocal(STORAGE_KEYS.apiKey, d.apiKey || null);
@@ -1782,6 +1812,7 @@ window.FIREBASE_VAPID_KEY =
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
         writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
+        cloud.notifyPrefs = { repeatMin: d.notifyRepeatMin, repeatMax: d.notifyRepeatMax, plans: d.notifyPlans };
       } else {
         // 初めてのログイン：この端末の記録をアカウントに引き継ぐ
         await pushToCloud();
@@ -1866,6 +1897,44 @@ window.FIREBASE_VAPID_KEY =
    * ========================================================== */
   const NOTIFY_TOKEN_KEY = "habitApp.notifyToken"; // この端末のFCMトークン
   const DEFAULT_NOTIFY_TIME = "20:00";
+  // まだ勉強していないときの送り直し（scripts/send-reminders.mjs の既定値と合わせる）
+  const DEFAULT_REPEAT_MIN = 60;
+  const DEFAULT_REPEAT_MAX = 3;
+
+  function notifyPrefs() {
+    const p = cloud.notifyPrefs || {};
+    return {
+      repeatMin: p.repeatMin ?? DEFAULT_REPEAT_MIN,
+      repeatMax: p.repeatMax || DEFAULT_REPEAT_MAX,
+      plans: p.plans !== false,
+    };
+  }
+
+  // 送り直しなどの設定をアカウントに保存する（全端末共通）
+  async function saveNotifyPrefs(change) {
+    if (!cloud.user) return;
+    const next = { ...notifyPrefs(), ...change };
+    cloud.notifyPrefs = next;
+    renderNotifyUI();
+    try {
+      await cloud.fsMod.setDoc(
+        userDocRef(),
+        { notifyRepeatMin: next.repeatMin, notifyRepeatMax: next.repeatMax, notifyPlans: next.plans },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error(err);
+      renderNotifyUI("通知の設定を保存できませんでした");
+    }
+  }
+
+  // 例: "毎日 20:00 に。まだなら1時間ごとに、1日3回まで"
+  function notifyScheduleText(time) {
+    const { repeatMin, repeatMax } = notifyPrefs();
+    if (!repeatMin) return `毎日 ${time} にお知らせします`;
+    const every = repeatMin >= 60 ? `${repeatMin / 60}時間` : `${repeatMin}分`;
+    return `毎日 ${time} に。まだ勉強していなければ${every}ごとに、1日${repeatMax}回までお知らせします`;
+  }
 
   const notify = {
     mod: null,       // firebase-messaging モジュール
@@ -1883,6 +1952,13 @@ window.FIREBASE_VAPID_KEY =
     el.notifyOnBtn.addEventListener("click", () => runNotifyAction(enableNotify));
     el.notifyOffBtn.addEventListener("click", () => runNotifyAction(disableNotify));
     el.notifyTime.addEventListener("change", saveNotifyTime);
+    el.notifyRepeatChips.querySelectorAll("[data-repeat]").forEach((b) =>
+      b.addEventListener("click", () => saveNotifyPrefs({ repeatMin: Number(b.dataset.repeat) }))
+    );
+    el.notifyMaxChips.querySelectorAll("[data-max]").forEach((b) =>
+      b.addEventListener("click", () => saveNotifyPrefs({ repeatMax: Number(b.dataset.max) }))
+    );
+    el.notifyPlansToggle.addEventListener("change", () => saveNotifyPrefs({ plans: el.notifyPlansToggle.checked }));
   }
 
   function getLocalNotifyToken() {
@@ -1910,6 +1986,15 @@ window.FIREBASE_VAPID_KEY =
     if (!show) return;
 
     el.notifyTime.value = cloud.notifyTime || DEFAULT_NOTIFY_TIME;
+    const prefs = notifyPrefs();
+    el.notifyRepeatChips.querySelectorAll("[data-repeat]").forEach((b) =>
+      b.classList.toggle("selected", Number(b.dataset.repeat) === prefs.repeatMin)
+    );
+    el.notifyMaxChips.querySelectorAll("[data-max]").forEach((b) =>
+      b.classList.toggle("selected", Number(b.dataset.max) === prefs.repeatMax)
+    );
+    el.notifyMaxRow.classList.toggle("hidden", !prefs.repeatMin);
+    el.notifyPlansToggle.checked = prefs.plans;
     const on = !!getLocalNotifyToken() && notifyPermission() === "granted";
     el.notifyOnBtn.classList.toggle("hidden", on);
     el.notifyOffBtn.classList.toggle("hidden", !on);
@@ -1929,9 +2014,9 @@ window.FIREBASE_VAPID_KEY =
       status = "通知がブロックされています。端末の設定で、このアプリの通知を許可してください";
       el.notifyOnBtn.disabled = true;
     } else if (on) {
-      status = `毎日 ${el.notifyTime.value} にお知らせします（その日達成済みなら送りません）`;
+      status = notifyScheduleText(el.notifyTime.value);
     } else {
-      status = "毎日決まった時刻にお知らせします（その日達成済みなら送りません）";
+      status = "毎日決まった時刻にお知らせします。勉強した日は、それ以降は送りません";
     }
     el.notifyStatus.textContent = status;
   }
