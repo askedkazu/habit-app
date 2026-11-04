@@ -319,6 +319,9 @@ body {
 }
 .timer-running { background: #fff4e6 !important; color: #c2570c !important; font-weight: 800; }
 
+/* アンケートで、答えに応じて出てくる質問 */
+.reveal { animation: fadeIn 0.25s ease-out; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;

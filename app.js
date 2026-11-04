@@ -157,9 +157,7 @@
     obPage: $("obPage"),
     obBackBtn: $("obBackBtn"),
     obNextBtn: $("obNextBtn"),
-    quickQCard: $("quickQCard"),
-    quickQSkip: $("quickQSkip"),
-    quickQBody: $("quickQBody"),
+
     bookTotals: $("bookTotals"),
     // STEP1
     shortStepList: $("shortStepList"),
@@ -883,7 +881,7 @@
     const goalText = [profile.goal, countdown].filter(Boolean).join(" ・ ") || "";
     el.homeGoal.classList.toggle("hidden", !goalText);
     el.homeGoal.textContent = goalText ? `🎯 ${profile.goal ? goalText : `試験まで ${countdown}`}` : "";
-    renderQuickQuestion();
+
     el.tipText.textContent = todaysTip(profile, now);
 
     // 今週（月曜はじまり）の達成
@@ -2056,22 +2054,85 @@
    * ホームの目標表示・今日のヒント・AIの問題の難しさに使う。
    * どの質問も飛ばせる。設定タブから答え直せる。
    * ========================================================== */
+  // 各ページの質問。when があるものは、それまでの答えによって表示する（例：高校生 → 何年生？）。
+  // options が関数のものは、それまでの答えで選択肢が変わる
+  const STUDENT_GRADES = {
+    中学生: ["1年", "2年", "3年"],
+    高校生: ["1年", "2年", "3年"],
+    "大学生・専門学生": ["1年", "2年", "3年", "4年", "大学院"],
+  };
+  const EXAM_PURPOSES = ["受験・入試", "資格・検定", "学校の授業・定期テスト"];
+
   const ONBOARDING_PAGES = [
     {
       title: "まずは、あなたのことを教えてください",
       sub: "問題の難しさや声かけを、あなたに合わせます",
       fields: [
         { key: "status", label: "今の立場", type: "single", options: ["中学生", "高校生", "浪人生", "大学生・専門学生", "社会人", "その他"] },
-        { key: "age", label: "年代", type: "single", options: ["〜15歳", "16〜18歳", "19〜22歳", "23〜29歳", "30代", "40代以上"] },
+        {
+          key: "grade",
+          label: "何年生？",
+          type: "single",
+          when: (p) => !!STUDENT_GRADES[p.status],
+          options: (p) => STUDENT_GRADES[p.status],
+        },
+        {
+          key: "age",
+          label: "年代",
+          type: "single",
+          // 中高生は学年で分かるので聞かない
+          when: (p) => p.status && p.status !== "中学生" && p.status !== "高校生",
+          options: ["〜18歳", "19〜22歳", "23〜29歳", "30代", "40代", "50代以上"],
+        },
       ],
     },
     {
       title: "何のために勉強していますか？",
       sub: "いくつでも選べます",
       fields: [
-        { key: "purposes", label: "目的", type: "multi", options: ["受験・入試", "資格・検定", "学校の授業・定期テスト", "語学", "仕事のスキルアップ", "趣味・教養"] },
+        { key: "purposes", label: "目的", type: "multi", options: [...EXAM_PURPOSES, "語学", "仕事のスキルアップ", "趣味・教養"] },
         { key: "goal", label: "目標（任意）", type: "text", placeholder: "例：3月の英検2級に合格する", maxLength: 40 },
+        {
+          key: "examDate",
+          label: "目標の試験・テストの日（任意）",
+          type: "date",
+          note: "ホームに「あと○日」と出ます",
+          when: (p) => (p.purposes || []).some((x) => EXAM_PURPOSES.includes(x)),
+        },
       ],
+    },
+    {
+      title: "勉強時間について教えてください",
+      sub: "今の時間が少なくても大丈夫。ここから伸ばしていこう",
+      fields: [
+        { key: "currentMinutes", label: "今、1日どれくらい勉強してる？", type: "single", options: ["ほぼ0分", "15分くらい", "30分くらい", "1時間くらい", "2時間以上"] },
+        {
+          key: "dailyTarget",
+          label: "1日の目標時間",
+          type: "single",
+          note: "まずは少なめがおすすめ。ちょいステップは5分からでOK！",
+          options: [5, 10, 15, 30, 60, 90],
+          format: (v) => `${v}分`,
+        },
+      ],
+    },
+    {
+      title: "いつ・どこで勉強しますか？",
+      sub: "いくつでも選べます",
+      fields: [
+        { key: "studyTimes", label: "勉強しやすい時間帯", type: "multi", options: ["朝", "昼休み", "放課後・仕事のあと", "夜", "寝る前", "バラバラ"] },
+        { key: "places", label: "よく勉強する場所", type: "multi", options: ["家", "学校", "図書館", "カフェ", "電車・バス", "職場"] },
+      ],
+    },
+    {
+      title: "苦手な科目はありますか？",
+      sub: "いくつでも選べます",
+      fields: [{ key: "weakSubjects", label: "苦手な科目", type: "multi", options: ["英語", "数学", "国語", "理科", "社会", "特になし"] }],
+    },
+    {
+      title: "ふだんの忙しさを教えてください",
+      sub: "無理のないペースを一緒に考えます",
+      fields: [{ key: "busy", label: "部活・仕事・バイト", type: "single", options: ["ほとんどない", "週に2〜3日", "ほぼ毎日"] }],
     },
     {
       title: "勉強の悩みはありますか？",
@@ -2084,19 +2145,6 @@
           options: ["続かない・三日坊主", "やる気が出ない", "ついスマホを触ってしまう", "勉強する時間がない", "何から始めればいいか分からない", "集中できない", "覚えてもすぐ忘れる"],
         },
         { key: "worryNote", label: "そのほか（任意）", type: "text", placeholder: "自由に書いてOK", maxLength: 100 },
-      ],
-    },
-    {
-      title: "1日どれくらい勉強したいですか？",
-      sub: "まずは少なめがおすすめ。ちょいステップは5分からでOK！",
-      fields: [
-        {
-          key: "dailyTarget",
-          label: "1日の目標時間",
-          type: "single",
-          options: [5, 10, 15, 30, 60, 90],
-          format: (v) => `${v}分`,
-        },
       ],
     },
   ];
@@ -2113,36 +2161,10 @@
   };
   const DEFAULT_TIP = "今日の一歩は小さくてOK。続けることが一番の近道です";
 
-  // もう少し詳しく聞く質問。最初のアンケートには入れず、ホームの「ちょい質問」で
-  // 1日1問だけ聞く（スキップしたものは二度と聞かない）。設定の「答え直す」ではまとめて答えられる。
-  // options が関数のものは、それまでの答えによって聞くかどうか・選択肢が変わる（null なら聞かない）
-  const EXTRA_QUESTIONS = [
-    {
-      key: "grade",
-      label: "今、何年生？",
-      type: "single",
-      options: (p) =>
-        p.status === "中学生" || p.status === "高校生"
-          ? ["1年", "2年", "3年"]
-          : p.status === "大学生・専門学生"
-            ? ["1年", "2年", "3年", "4年", "大学院"]
-            : null,
-    },
-    { key: "examDate", label: "目標の試験・テストの日は？", type: "date", note: "ホームに「あと○日」と出ます" },
-    { key: "currentMinutes", label: "今、1日どれくらい勉強してる？", type: "single", options: ["ほぼ0分", "15分くらい", "30分くらい", "1時間くらい", "2時間以上"] },
-    { key: "studyTimes", label: "勉強しやすい時間帯は？", type: "multi", options: ["朝", "昼休み", "放課後・仕事のあと", "夜", "寝る前", "バラバラ"] },
-    { key: "places", label: "どこで勉強することが多い？", type: "multi", options: ["家", "学校", "図書館", "カフェ", "電車・バス", "職場"] },
-    { key: "weakSubjects", label: "苦手な科目は？", type: "multi", options: ["英語", "数学", "国語", "理科", "社会", "特になし"] },
-    { key: "busy", label: "部活・仕事・バイトはどれくらい？", type: "single", options: ["ほとんどない", "週に2〜3日", "ほぼ毎日"] },
-  ];
-
   function resolveOptions(field, profile) {
     return typeof field.options === "function" ? field.options(profile) : field.options;
   }
 
-  function isAnswered(value) {
-    return Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== "";
-  }
 
   // 試験日までの日数（未設定・過去なら null）
   function daysUntil(dateStr) {
@@ -2162,18 +2184,16 @@
     return storage.getJSON(STORAGE_KEYS.profile, {}) || {};
   }
 
-  const onboarding = { page: 0, draft: {}, pages: ONBOARDING_PAGES, editing: false };
+  // shown: 今のページで表示中の質問（あとから出てきた質問だけアニメーションさせるため）
+  const onboarding = { page: 0, draft: {}, pages: ONBOARDING_PAGES, editing: false, shown: new Set() };
 
-  // 初回は短いアンケートだけ。設定から答え直すときは「もう少し詳しく」のページも付ける
-  function openOnboarding({ withExtra = false } = {}) {
+  // editing: 設定から答え直すとき（最後のボタンが「保存する」になる）
+  function openOnboarding({ editing = false } = {}) {
     onboarding.page = 0;
     onboarding.draft = { ...getProfile() };
-    onboarding.editing = withExtra;
-    onboarding.pages = withExtra
-      ? [...ONBOARDING_PAGES, { title: "もう少し詳しく（任意）", sub: "分かるところだけでOK。空欄のままでも大丈夫です", fields: EXTRA_QUESTIONS }]
-      : ONBOARDING_PAGES;
+    onboarding.editing = editing;
     showTab("onboarding");
-    renderOnboardingPage();
+    renderOnboardingPage({ newPage: true });
   }
 
   // 答えを保存してホームへ（「あとで」でも、それまでの答えは保存する）
@@ -2184,7 +2204,8 @@
     showTab("home");
   }
 
-  function renderOnboardingPage() {
+  // newPage: ページを移ったとき（画面全体をアニメーションさせる）。選択肢を押しただけのときは false
+  function renderOnboardingPage({ newPage = false } = {}) {
     const pages = onboarding.pages;
     const page = pages[onboarding.page];
     const isLast = onboarding.page === pages.length - 1;
@@ -2193,10 +2214,15 @@
     el.obNextBtn.textContent = isLast ? (onboarding.editing ? "保存する" : "はじめる！") : "次へ";
 
     el.obPage.innerHTML = "";
-    // 画面切り替えのアニメーションをもう一度再生する
-    el.obPage.classList.remove("screen");
-    void el.obPage.offsetWidth;
-    el.obPage.classList.add("screen");
+    if (newPage) {
+      onboarding.shown = new Set();
+      // 画面切り替えのアニメーションをもう一度再生する
+      el.obPage.classList.remove("screen");
+      void el.obPage.offsetWidth;
+      el.obPage.classList.add("screen");
+    }
+    const shownBefore = onboarding.shown;
+    onboarding.shown = new Set();
 
     const title = document.createElement("h2");
     title.className = "font-bold text-lg";
@@ -2207,13 +2233,30 @@
     el.obPage.append(title, sub);
 
     page.fields.forEach((field) => {
-      const options = resolveOptions(field, onboarding.draft);
-      if ((field.type === "single" || field.type === "multi") && !options) return; // 今の答えでは聞かない質問
+      const draft = onboarding.draft;
+      // 今の答えでは聞かない質問は出さず、前の答えも消す（例：高校生 → 社会人に変えたら学年を消す）
+      if (field.when && !field.when(draft)) {
+        delete draft[field.key];
+        return;
+      }
+      const options = resolveOptions(field, draft);
+      if (field.type === "single" && options && draft[field.key] !== undefined && !options.includes(draft[field.key])) {
+        delete draft[field.key]; // 選択肢が変わって、前の答えが選べなくなった
+      }
 
+      onboarding.shown.add(field.key);
+      // 答えに応じて新しく出てきた質問だけ、ふわっと表示する
+      const revealed = !newPage && !shownBefore.has(field.key);
       const label = document.createElement("p");
-      label.className = "field-label mt-4";
+      label.className = `field-label mt-4${revealed ? " reveal" : ""}`;
       label.textContent = field.label;
       el.obPage.append(label);
+      if (field.note) {
+        const note = document.createElement("p");
+        note.className = "text-xs text-slate-500 -mt-1 mb-2";
+        note.textContent = field.note;
+        el.obPage.append(note);
+      }
 
       if (field.type === "date") {
         const input = document.createElement("input");
@@ -2267,100 +2310,6 @@
     });
   }
 
-  /* ---------- ちょい質問（ホームで1日1問） ---------- */
-  // まだ答えておらず、スキップもしていない次の質問（今日すでに1問聞いた・アンケート当日なら null）
-  function nextQuickQuestion() {
-    const p = getProfile();
-    if (!p.done) return null;
-    const today = dateKey();
-    if (p.quickAskedOn === today) return null;
-    if (p.answeredAt && dateKey(new Date(p.answeredAt)) === today) return null;
-    const skipped = p.skippedQuestions || [];
-    return (
-      EXTRA_QUESTIONS.find(
-        (q) => !isAnswered(p[q.key]) && !skipped.includes(q.key) && (q.type === "date" || resolveOptions(q, p))
-      ) || null
-    );
-  }
-
-  // 答え（またはスキップ）を保存する。どちらでも今日はもう聞かない
-  function answerQuickQuestion(q, value, { skipped = false } = {}) {
-    const p = getProfile();
-    if (skipped) p.skippedQuestions = [...new Set([...(p.skippedQuestions || []), q.key])];
-    else p[q.key] = value;
-    p.quickAskedOn = dateKey();
-    storage.setJSON(STORAGE_KEYS.profile, p);
-    renderProfileSummary();
-    renderStats();
-    if (!skipped) {
-      el.quickQCard.classList.remove("hidden");
-      el.quickQBody.innerHTML = "";
-      const thanks = document.createElement("p");
-      thanks.className = "text-sm font-bold text-slate-700";
-      thanks.textContent = "ありがとう！また明日、ひとつだけ聞かせてね 🙌";
-      el.quickQBody.append(thanks);
-      el.quickQSkip.classList.add("hidden");
-      setTimeout(() => el.quickQCard.classList.add("hidden"), 2500);
-    }
-  }
-
-  function renderQuickQuestion() {
-    const q = nextQuickQuestion();
-    el.quickQCard.classList.toggle("hidden", !q);
-    el.quickQSkip.classList.remove("hidden");
-    if (!q) return;
-    el.quickQBody.innerHTML = "";
-    const title = document.createElement("p");
-    title.className = "text-sm font-bold text-slate-800 mb-2";
-    title.textContent = q.label;
-    el.quickQBody.append(title);
-    if (q.note) {
-      const note = document.createElement("p");
-      note.className = "text-xs text-slate-500 -mt-1 mb-2";
-      note.textContent = q.note;
-      el.quickQBody.append(note);
-    }
-
-    // 1つ選ぶ質問はタップした時点で保存。複数選ぶ・日付は「OK」で保存
-    const okBtn = document.createElement("button");
-    okBtn.className = "btn-primary text-sm w-full mt-3";
-    okBtn.textContent = "OK";
-
-    if (q.type === "date") {
-      const input = document.createElement("input");
-      input.type = "date";
-      input.className = "input w-full";
-      okBtn.disabled = true;
-      input.addEventListener("change", () => (okBtn.disabled = !input.value));
-      okBtn.addEventListener("click", () => input.value && answerQuickQuestion(q, input.value));
-      el.quickQBody.append(input, okBtn);
-      return;
-    }
-
-    const wrap = document.createElement("div");
-    wrap.className = "flex flex-wrap gap-2";
-    const picked = new Set();
-    resolveOptions(q, getProfile()).forEach((option) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "book-chip";
-      btn.textContent = option;
-      btn.addEventListener("click", () => {
-        if (q.type === "single") return answerQuickQuestion(q, option);
-        picked.has(option) ? picked.delete(option) : picked.add(option);
-        btn.classList.toggle("selected", picked.has(option));
-        okBtn.disabled = picked.size === 0;
-      });
-      wrap.append(btn);
-    });
-    el.quickQBody.append(wrap);
-    if (q.type === "multi") {
-      okBtn.disabled = true;
-      okBtn.addEventListener("click", () => picked.size && answerQuickQuestion(q, [...picked]));
-      el.quickQBody.append(okBtn);
-    }
-  }
-
   // 設定タブ：答えの一覧
   function renderProfileSummary() {
     const p = getProfile();
@@ -2377,8 +2326,15 @@
       ["場所", (p.places || []).join("、")],
       ["苦手科目", (p.weakSubjects || []).join("、")],
       ["部活・仕事", p.busy],
-    ].filter(([key, value], i) => i < 5 || value); // 追加の質問は答えたものだけ表示
+    ].filter(([, value]) => value); // 答えたものだけ表示
     el.profileSummary.innerHTML = "";
+    if (rows.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "text-slate-400";
+      empty.textContent = "まだ答えていません。「答え直す」から答えられます";
+      el.profileSummary.append(empty);
+      return;
+    }
     rows.forEach(([key, value]) => {
       const row = document.createElement("div");
       row.className = "flex gap-3";
@@ -2397,21 +2353,17 @@
     el.obNextBtn.addEventListener("click", () => {
       if (onboarding.page < onboarding.pages.length - 1) {
         onboarding.page++;
-        renderOnboardingPage();
+        renderOnboardingPage({ newPage: true });
       } else {
         finishOnboarding();
       }
     });
     el.obBackBtn.addEventListener("click", () => {
       onboarding.page = Math.max(0, onboarding.page - 1);
-      renderOnboardingPage();
+      renderOnboardingPage({ newPage: true });
     });
     el.obSkipBtn.addEventListener("click", finishOnboarding);
-    el.editProfileBtn.addEventListener("click", () => openOnboarding({ withExtra: true }));
-    el.quickQSkip.addEventListener("click", () => {
-      const q = nextQuickQuestion();
-      if (q) answerQuickQuestion(q, undefined, { skipped: true });
-    });
+    el.editProfileBtn.addEventListener("click", () => openOnboarding({ editing: true }));
     renderProfileSummary();
   }
 
