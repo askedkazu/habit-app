@@ -210,6 +210,12 @@
     calendarLinked: $("calendarLinked"),
     calendarStatus: $("calendarStatus"),
     calendarUnlinkBtn: $("calendarUnlinkBtn"),
+    calendarRefreshBtn: $("calendarRefreshBtn"),
+    calendarGoogleBox: $("calendarGoogleBox"),
+    calendarGoogleBtn: $("calendarGoogleBtn"),
+    calendarUseUrlBtn: $("calendarUseUrlBtn"),
+    calendarUrlBox: $("calendarUrlBox"),
+    calendarUrlNote: $("calendarUrlNote"),
     calendarSetup: $("calendarSetup"),
     calendarProviders: $("calendarProviders"),
     calendarHowto: $("calendarHowto"),
@@ -642,6 +648,8 @@
     cloud.unsubscribeDoc?.();
     cloud.unsubscribeDoc = null;
     cloud.calendar = null;
+    googleToken.value = ""; // 次に使う人が、前の人のカレンダーを読めないようにする
+    googleToken.expiresAt = 0;
     await cloud.authMod.signOut(cloud.auth);
     // 次に使う人に記録やAPIキーが見えないよう、この端末のデータを消す
     Object.values(STORAGE_KEYS).forEach((key) => {
@@ -978,9 +986,11 @@
   /* ==========================================================
    * カレンダー連携と勉強プラン
    * ----------------------------------------------------------
-   * - 利用者が貼った「カレンダーの非公開URL（iCal形式）」を users/{uid}.calendarUrl に保存する
-   * - GitHub Actions（scripts/sync-calendars.mjs）が予定の入っている時間帯だけを読み取り、
-   *   users/{uid}.calendarBusy に保存する（ブラウザからは他サイトのカレンダーを直接読めないため）
+   * - Google：ワンタップで許可をもらい、ブラウザから Google Calendar API の freeBusy で
+   *   予定の入っている時間帯だけを読み、users/{uid}.calendarBusy に保存する（calendarSource: "google"）。
+   *   許可の有効期限は約1時間なので、アプリを開いたときにまだ有効なら読み直し、切れていたら1タップで読み直す
+   * - iPhone（iCloud）・Outlook：ブラウザから直接読めないため、利用者が貼った「カレンダーのURL（iCal形式）」を
+   *   users/{uid}.calendarUrl に保存し、GitHub Actions（scripts/sync-calendars.mjs）が読み取る
    * - アプリはその時間帯を避けて、アンケートの「勉強しやすい時間帯」「1日の目標時間」から
    *   毎日のおすすめの時間を出す。カレンダーへは書き込まず、予定はこのアプリの中に保存する
    * ========================================================== */
@@ -1014,6 +1024,15 @@
     寝る前: [21 * 60 + 30, 23 * 60 + 30],
   };
   const WIDE_WINDOW = [7 * 60, 23 * 60]; // 希望の時間帯が埋まっているときに探す範囲
+
+  // Google カレンダー：予定の空き時間情報と、カレンダーの一覧だけを読む許可
+  const GOOGLE_CALENDAR_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.freebusy",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  ];
+  const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
+  const CALENDAR_RANGE_DAYS = 8;
+  const GOOGLE_RESYNC_MS = 30 * 60 * 1000; // アプリを開いたとき、これより古ければ読み直す
   const PLAN_BUFFER_MIN = 10; // 予定の前後は少しあける
   const PLAN_DAYS = 7;
 
@@ -1024,9 +1043,11 @@
       userDocRef(),
       (snap) => {
         const d = snap.data() || {};
-        cloud.calendar = d.calendarUrl
+        cloud.calendar =
+          d.calendarUrl || d.calendarSource === "google"
           ? {
-              url: d.calendarUrl,
+              source: d.calendarSource === "google" ? "google" : "url",
+              url: d.calendarUrl || "",
               busy: Array.isArray(d.calendarBusy) ? d.calendarBusy : null,
               syncedAt: d.calendarSyncedAt?.toMillis?.() || 0,
               updatedAt: d.calendarUpdatedAt?.toMillis?.() || 0,
@@ -1034,22 +1055,31 @@
             }
           : null;
         renderCalendar();
+        maybeResyncGoogle();
       },
       (err) => console.error(err)
     );
   }
 
   let calendarProvider = "google";
+  let calendarUseUrl = false; // Google でもURLで連携する（ワンタップがうまくいかないとき）
 
   function initCalendar() {
     el.calendarProviders.querySelectorAll("[data-provider]").forEach((btn) =>
       btn.addEventListener("click", () => {
         calendarProvider = btn.dataset.provider;
+        calendarUseUrl = false;
         renderCalendar();
       })
     );
     el.calendarSaveBtn.addEventListener("click", saveCalendarUrl);
     el.calendarUnlinkBtn.addEventListener("click", unlinkCalendar);
+    el.calendarGoogleBtn.addEventListener("click", () => syncGoogleCalendar({ interactive: true }));
+    el.calendarRefreshBtn.addEventListener("click", () => syncGoogleCalendar({ interactive: true }));
+    el.calendarUseUrlBtn.addEventListener("click", () => {
+      calendarUseUrl = true;
+      renderCalendar();
+    });
     el.planToggle.addEventListener("click", () => {
       const open = el.planWeek.classList.toggle("hidden");
       el.planToggle.textContent = open ? "7日分を見る" : "閉じる";
@@ -1082,9 +1112,16 @@
 
   async function unlinkCalendar() {
     const { setDoc, deleteField } = cloud.fsMod;
+    // Google の許可も取り消しておく（もう一度連携するときは、また許可を聞く）
+    if (googleToken.value) {
+      fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(googleToken.value)}`, { method: "POST" }).catch(() => {});
+    }
+    googleToken.value = "";
+    googleToken.expiresAt = 0;
     await setDoc(
       userDocRef(),
       {
+        calendarSource: deleteField(),
         calendarUrl: deleteField(),
         calendarBusy: deleteField(),
         calendarSyncedAt: deleteField(),
@@ -1093,6 +1130,137 @@
       },
       { merge: true }
     ).catch((err) => console.error(err));
+  }
+
+  /* ---------- Google カレンダー（ワンタップ連携） ---------- */
+  const googleToken = { value: "", expiresAt: 0 }; // この端末でだけ使う一時的な許可（保存しない）
+  let googleSyncing = false;
+
+  function hasGoogleToken() {
+    return googleToken.value && Date.now() < googleToken.expiresAt - 60_000;
+  }
+
+  // Google に「空き時間情報を読む」許可をもらう（Google でログインしている人は再確認、そうでない人は Google を追加）
+  async function requestGoogleCalendarToken() {
+    const { GoogleAuthProvider, reauthenticateWithPopup, linkWithPopup } = cloud.authMod;
+    const provider = new GoogleAuthProvider();
+    GOOGLE_CALENDAR_SCOPES.forEach((scope) => provider.addScope(scope));
+    const user = cloud.auth.currentUser;
+    const hasGoogle = user.providerData.some((p) => p.providerId === "google.com");
+    if (!hasGoogle) provider.setCustomParameters({ prompt: "select_account" });
+    const result = hasGoogle ? await reauthenticateWithPopup(user, provider) : await linkWithPopup(user, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) throw new Error("Googleから許可をもらえませんでした");
+    googleToken.value = credential.accessToken;
+    googleToken.expiresAt = Date.now() + 55 * 60 * 1000; // 有効期限は約1時間
+  }
+
+  async function googleApi(path, options = {}) {
+    const res = await fetch(`${GOOGLE_CALENDAR_API}${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${googleToken.value}`, "Content-Type": "application/json", ...(options.headers || {}) },
+    });
+    if (res.status === 401) {
+      googleToken.value = "";
+      throw Object.assign(new Error("Googleの許可の期限が切れました"), { code: "expired" });
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const reason = data?.error?.errors?.[0]?.reason || data?.error?.status || res.status;
+      if (reason === "accessNotConfigured" || /has not been used|disabled/i.test(data?.error?.message || "")) {
+        throw new Error("Google Calendar API が有効になっていません（管理者の設定が必要です）");
+      }
+      throw new Error(`Googleカレンダーを読み込めませんでした（${reason}）`);
+    }
+    return data;
+  }
+
+  // 自分のカレンダー一覧 → 今日から8日分の「予定の入っている時間帯」を読み、まとめて保存する
+  async function fetchGoogleBusy() {
+    const list = await googleApi("/users/me/calendarList?minAccessRole=freeBusyReader&maxResults=50");
+    const ids = (list.items || []).filter((c) => c.selected !== false && !c.hidden).map((c) => c.id);
+    if (!ids.includes("primary") && !ids.length) ids.push("primary");
+    const now = new Date();
+    const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const timeMax = new Date(timeMin.getTime() + CALENDAR_RANGE_DAYS * 86400000);
+    const fb = await googleApi("/freeBusy", {
+      method: "POST",
+      body: JSON.stringify({
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        items: ids.slice(0, 50).map((id) => ({ id })),
+      }),
+    });
+    const blocks = Object.values(fb.calendars || {})
+      .flatMap((c) => c.busy || [])
+      .map((b) => ({ s: Date.parse(b.start), e: Date.parse(b.end) }))
+      .filter((b) => b.e > b.s)
+      .sort((a, b) => a.s - b.s);
+    // 重なっている時間帯はまとめる（scripts/sync-calendars.mjs と同じ形にする）
+    const merged = [];
+    for (const b of blocks) {
+      const last = merged[merged.length - 1];
+      if (last && b.s <= last.e) last.e = Math.max(last.e, b.e);
+      else merged.push({ ...b });
+    }
+    return { blocks: merged.slice(0, 400), calendars: ids.length };
+  }
+
+  // interactive: ボタンを押したとき（許可が切れていれば Google の画面を出す）。false なら、許可が有効なときだけ読み直す
+  async function syncGoogleCalendar({ interactive = false } = {}) {
+    if (!cloud.user || googleSyncing) return;
+    if (!interactive && !hasGoogleToken()) return;
+    googleSyncing = true;
+    el.calendarMsg.textContent = "";
+    el.calendarGoogleBtn.disabled = true;
+    el.calendarRefreshBtn.disabled = true;
+    try {
+      if (!hasGoogleToken()) await requestGoogleCalendarToken();
+      const { blocks, calendars } = await fetchGoogleBusy();
+      const { setDoc, serverTimestamp, deleteField } = cloud.fsMod;
+      await setDoc(
+        userDocRef(),
+        {
+          calendarSource: "google",
+          calendarUrl: deleteField(), // URLでの連携から切り替えた場合
+          calendarBusy: blocks,
+          calendarCount: calendars,
+          calendarSyncedAt: serverTimestamp(),
+          calendarUpdatedAt: deleteField(),
+          calendarError: deleteField(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error(err);
+      if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
+      el.calendarMsg.textContent =
+        err.code === "auth/credential-already-in-use"
+          ? "このGoogleアカウントは、別のアカウントですでに使われています。そのGoogleアカウントでログインし直してから連携してください"
+          : err.code === "auth/popup-blocked"
+            ? "ポップアップがブロックされました。ブラウザの設定で許可してください"
+            : err.code?.startsWith?.("auth/")
+              ? authErrorMessage(err)
+              : err.message;
+      if (cloud.calendar) renderCalendarStatusError(el.calendarMsg.textContent);
+    } finally {
+      googleSyncing = false;
+      el.calendarGoogleBtn.disabled = false;
+      el.calendarRefreshBtn.disabled = false;
+    }
+  }
+
+  // 連携中の画面では calendarMsg が隠れているので、状態の欄に出す
+  function renderCalendarStatusError(text) {
+    el.calendarStatus.className = "text-sm text-rose-600";
+    el.calendarStatus.textContent = `⚠️ ${text}`;
+  }
+
+  // アカウントのデータを読み込んだとき：Google 連携中で、読み込みが古ければ（許可が有効な間は）自動で読み直す
+  function maybeResyncGoogle() {
+    const cal = cloud.calendar;
+    if (cal?.source !== "google") return;
+    if (Date.now() - (cal.syncedAt || 0) > GOOGLE_RESYNC_MS) syncGoogleCalendar();
   }
 
   function formatClock(date) {
@@ -1109,6 +1277,16 @@
     el.calendarProviders.querySelectorAll("[data-provider]").forEach((btn) =>
       btn.classList.toggle("selected", btn.dataset.provider === calendarProvider)
     );
+    // Google はワンタップ。iPhone・Outlook（と、Google の予備）はURLを貼る
+    const useUrl = calendarProvider !== "google" || calendarUseUrl;
+    el.calendarGoogleBox.classList.toggle("hidden", useUrl);
+    el.calendarUrlBox.classList.toggle("hidden", !useUrl);
+    el.calendarUrlNote.textContent =
+      calendarProvider === "icloud"
+        ? "iPhoneのカレンダーはアプリから直接読めないため、共有リンクを貼る方法になります"
+        : calendarProvider === "outlook"
+          ? "Outlookの予定表を「空き時間情報のみ」で公開して、そのリンクを貼ります"
+          : "Googleカレンダーの「iCal 形式の非公開URL」を貼ります";
     el.calendarHowto.innerHTML = "";
     CALENDAR_HOWTO[calendarProvider].forEach((text) => {
       const li = document.createElement("li");
@@ -1116,7 +1294,16 @@
       el.calendarHowto.append(li);
     });
 
-    if (cal) {
+    el.calendarRefreshBtn.classList.add("hidden");
+    if (cal?.source === "google") {
+      const stale = Date.now() - (cal.syncedAt || 0) > GOOGLE_RESYNC_MS;
+      el.calendarStatus.className = "text-sm text-slate-700";
+      el.calendarStatus.textContent = cal.syncedAt
+        ? `✅ Googleカレンダーと連携中（${formatClock(new Date(cal.syncedAt))} に読み込み・これから8日間の予定 ${cal.busy?.length || 0} 件）`
+        : "✅ Googleカレンダーと連携しました。読み込み中…";
+      // 許可が切れていて自動で読み直せないときだけ、ボタンを出す
+      el.calendarRefreshBtn.classList.toggle("hidden", !(stale && !hasGoogleToken()));
+    } else if (cal) {
       const waiting = !cal.syncedAt || cal.updatedAt > cal.syncedAt;
       el.calendarStatus.className = `text-sm ${cal.error && !waiting ? "text-rose-600" : "text-slate-700"}`;
       el.calendarStatus.textContent = waiting
