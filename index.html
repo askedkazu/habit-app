@@ -55,6 +55,8 @@
           <span class="text-base font-bold mb-1">日連続</span>
         </div>
 
+        <p id="homeStudyTime" class="text-sm font-bold mt-2 opacity-95"></p>
+
         <!-- 今週の達成（月〜日） -->
         <ol id="weekRow" class="week-row mt-5"></ol>
       </section>
@@ -132,6 +134,12 @@
         <div id="calGrid" class="cal-grid"></div>
       </section>
 
+      <!-- 教材ごとの勉強時間 -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">教材ごとの勉強時間</h2>
+        <div id="bookTotals" class="card space-y-3"></div>
+      </section>
+
       <!-- バッジ -->
       <section class="mt-6">
         <h2 class="section-title mb-2">バッジ</h2>
@@ -172,6 +180,13 @@
         </div>
         <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
         <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
+      </section>
+
+      <!-- 教材 -->
+      <section class="card">
+        <p class="text-sm font-bold">📚 登録した教材</p>
+        <p class="text-xs text-slate-500 mb-2">教材は、勉強の記録の画面から追加できます</p>
+        <ul id="bookManageList" class="divide-y divide-slate-100"></ul>
       </section>
 
       <!-- 自分で追加したステップ -->
@@ -217,11 +232,13 @@
 
       <!-- 進捗インジケータ -->
       <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
-        <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+        <li class="step" data-step="1"><span>1</span>ちょい</li>
         <li class="step-line"></li>
-        <li class="step" data-step="2"><span>2</span>証拠写真</li>
+        <li class="step" data-step="2"><span>2</span>勉強記録</li>
         <li class="step-line"></li>
-        <li class="step" data-step="3"><span>3</span>確認テスト</li>
+        <li class="step" data-step="3"><span>3</span>証拠写真</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="4"><span>4</span>テスト</li>
       </ol>
 
       <!-- STEP 1: ショートステップ -->
@@ -242,7 +259,38 @@
         </button>
       </section>
 
-      <!-- STEP 2: 証拠写真アップロード -->
+      <!-- STEP 2: 勉強の記録（教材と時間） -->
+      <section id="stepStudy" class="card screen hidden">
+        <h2 class="font-bold text-lg mb-1">何を勉強する？</h2>
+        <p class="text-sm text-slate-500 mb-4">教材と時間を記録しよう。教材名はAIの問題作りにも使います（入力しなくても進めます）</p>
+
+        <p class="field-label">📚 教材</p>
+        <div id="bookList" class="flex flex-wrap gap-2"></div>
+        <form id="addBookForm" class="flex gap-2 mt-2">
+          <input id="newBookInput" type="text" maxlength="40" placeholder="教材を追加（例：英単語ターゲット1900）" class="input flex-1 min-w-0" />
+          <button class="btn-ghost text-sm" type="submit">追加</button>
+        </form>
+
+        <p class="field-label mt-5">⏱ 勉強時間</p>
+        <div class="flex items-center justify-center gap-4">
+          <button id="minusTimeBtn" class="round-btn" type="button" aria-label="5分減らす">−</button>
+          <p class="text-center"><span id="studyMinutes" class="text-4xl font-extrabold tabular-nums">0</span><span class="font-bold ml-1">分</span></p>
+          <button id="plusTimeBtn" class="round-btn" type="button" aria-label="5分増やす">＋</button>
+        </div>
+        <div id="timeChips" class="grid grid-cols-5 gap-2 mt-3">
+          <button type="button" class="time-chip" data-min="5">5分</button>
+          <button type="button" class="time-chip" data-min="10">10分</button>
+          <button type="button" class="time-chip" data-min="15">15分</button>
+          <button type="button" class="time-chip" data-min="30">30分</button>
+          <button type="button" class="time-chip" data-min="60">60分</button>
+        </div>
+        <button id="timerBtn" class="btn-ghost w-full mt-3 text-sm" type="button">⏱ タイマーで計る</button>
+
+        <button id="studyNextBtn" class="btn-primary w-full mt-5 py-3 text-base">次へ：証拠写真</button>
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+      </section>
+
+      <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
         <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
         <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
@@ -282,10 +330,10 @@
         </div>
         <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
 
-        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="2">← 勉強の記録に戻る</button>
       </section>
 
-      <!-- STEP 3: 確認テスト -->
+      <!-- STEP 4: 確認テスト -->
       <section id="step3" class="card screen hidden">
         <div class="flex items-center justify-between mb-2">
           <span id="quizProgress" class="text-sm font-bold text-sky-600">Q1 / 3</span>

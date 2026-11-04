@@ -299,6 +299,41 @@ body {
 .step-item:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
 .step-item input { width: 1.35rem; height: 1.35rem; accent-color: var(--primary); flex-shrink: 0; }
 
+/* 勉強の記録 */
+.field-label { font-size: 0.85rem; font-weight: 800; color: #334155; margin-bottom: 0.5rem; }
+.book-chip {
+  padding: 0.5rem 0.85rem;
+  border-radius: 9999px;
+  border: 2px solid var(--line);
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334155;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-chip.selected { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-dark); }
+.round-btn {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: #eef1f4;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #334155;
+}
+.time-chip {
+  padding: 0.5rem 0;
+  border-radius: 0.7rem;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.timer-running { background: #fff4e6 !important; color: #c2570c !important; font-weight: 800; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
@@ -469,6 +504,8 @@ body {
           <span class="text-base font-bold mb-1">日連続</span>
         </div>
 
+        <p id="homeStudyTime" class="text-sm font-bold mt-2 opacity-95"></p>
+
         <!-- 今週の達成（月〜日） -->
         <ol id="weekRow" class="week-row mt-5"></ol>
       </section>
@@ -546,6 +583,12 @@ body {
         <div id="calGrid" class="cal-grid"></div>
       </section>
 
+      <!-- 教材ごとの勉強時間 -->
+      <section class="mt-6">
+        <h2 class="section-title mb-2">教材ごとの勉強時間</h2>
+        <div id="bookTotals" class="card space-y-3"></div>
+      </section>
+
       <!-- バッジ -->
       <section class="mt-6">
         <h2 class="section-title mb-2">バッジ</h2>
@@ -586,6 +629,13 @@ body {
         </div>
         <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
         <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
+      </section>
+
+      <!-- 教材 -->
+      <section class="card">
+        <p class="text-sm font-bold">📚 登録した教材</p>
+        <p class="text-xs text-slate-500 mb-2">教材は、勉強の記録の画面から追加できます</p>
+        <ul id="bookManageList" class="divide-y divide-slate-100"></ul>
       </section>
 
       <!-- 自分で追加したステップ -->
@@ -631,11 +681,13 @@ body {
 
       <!-- 進捗インジケータ -->
       <ol class="flex items-center justify-between text-xs mb-4" id="stepper">
-        <li class="step" data-step="1"><span>1</span>ちょいステップ</li>
+        <li class="step" data-step="1"><span>1</span>ちょい</li>
         <li class="step-line"></li>
-        <li class="step" data-step="2"><span>2</span>証拠写真</li>
+        <li class="step" data-step="2"><span>2</span>勉強記録</li>
         <li class="step-line"></li>
-        <li class="step" data-step="3"><span>3</span>確認テスト</li>
+        <li class="step" data-step="3"><span>3</span>証拠写真</li>
+        <li class="step-line"></li>
+        <li class="step" data-step="4"><span>4</span>テスト</li>
       </ol>
 
       <!-- STEP 1: ショートステップ -->
@@ -656,7 +708,38 @@ body {
         </button>
       </section>
 
-      <!-- STEP 2: 証拠写真アップロード -->
+      <!-- STEP 2: 勉強の記録（教材と時間） -->
+      <section id="stepStudy" class="card screen hidden">
+        <h2 class="font-bold text-lg mb-1">何を勉強する？</h2>
+        <p class="text-sm text-slate-500 mb-4">教材と時間を記録しよう。教材名はAIの問題作りにも使います（入力しなくても進めます）</p>
+
+        <p class="field-label">📚 教材</p>
+        <div id="bookList" class="flex flex-wrap gap-2"></div>
+        <form id="addBookForm" class="flex gap-2 mt-2">
+          <input id="newBookInput" type="text" maxlength="40" placeholder="教材を追加（例：英単語ターゲット1900）" class="input flex-1 min-w-0" />
+          <button class="btn-ghost text-sm" type="submit">追加</button>
+        </form>
+
+        <p class="field-label mt-5">⏱ 勉強時間</p>
+        <div class="flex items-center justify-center gap-4">
+          <button id="minusTimeBtn" class="round-btn" type="button" aria-label="5分減らす">−</button>
+          <p class="text-center"><span id="studyMinutes" class="text-4xl font-extrabold tabular-nums">0</span><span class="font-bold ml-1">分</span></p>
+          <button id="plusTimeBtn" class="round-btn" type="button" aria-label="5分増やす">＋</button>
+        </div>
+        <div id="timeChips" class="grid grid-cols-5 gap-2 mt-3">
+          <button type="button" class="time-chip" data-min="5">5分</button>
+          <button type="button" class="time-chip" data-min="10">10分</button>
+          <button type="button" class="time-chip" data-min="15">15分</button>
+          <button type="button" class="time-chip" data-min="30">30分</button>
+          <button type="button" class="time-chip" data-min="60">60分</button>
+        </div>
+        <button id="timerBtn" class="btn-ghost w-full mt-3 text-sm" type="button">⏱ タイマーで計る</button>
+
+        <button id="studyNextBtn" class="btn-primary w-full mt-5 py-3 text-base">次へ：証拠写真</button>
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+      </section>
+
+      <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
         <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
         <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。</p>
@@ -696,10 +779,10 @@ body {
         </div>
         <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
 
-        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+        <button class="back-btn text-sm text-slate-500 mt-4" data-back="2">← 勉強の記録に戻る</button>
       </section>
 
-      <!-- STEP 3: 確認テスト -->
+      <!-- STEP 4: 確認テスト -->
       <section id="step3" class="card screen hidden">
         <div class="flex items-center justify-between mb-2">
           <span id="quizProgress" class="text-sm font-bold text-sky-600">Q1 / 3</span>
@@ -834,7 +917,11 @@ window.FIREBASE_VAPID_KEY =
     customSteps: "habitApp.customSteps",
     history: "habitApp.history", // 達成した日付（YYYY-MM-DD）の配列
     logs: "habitApp.logs", // 記録（日時・テーマ・正解数など）の配列
+    books: "habitApp.books", // 登録した教材名の配列
   };
+  // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
+  const TIMER_KEY = "habitApp.timerStart";
+  const MAX_STUDY_MINUTES = 600;
 
   // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
   const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -941,6 +1028,19 @@ window.FIREBASE_VAPID_KEY =
     allLogs: $("allLogs"),
     // 設定
     customStepList: $("customStepList"),
+    bookManageList: $("bookManageList"),
+    // 勉強の記録
+    bookList: $("bookList"),
+    addBookForm: $("addBookForm"),
+    newBookInput: $("newBookInput"),
+    studyMinutes: $("studyMinutes"),
+    minusTimeBtn: $("minusTimeBtn"),
+    plusTimeBtn: $("plusTimeBtn"),
+    timeChips: $("timeChips"),
+    timerBtn: $("timerBtn"),
+    studyNextBtn: $("studyNextBtn"),
+    homeStudyTime: $("homeStudyTime"),
+    bookTotals: $("bookTotals"),
     // STEP1
     shortStepList: $("shortStepList"),
     addStepForm: $("addStepForm"),
@@ -985,10 +1085,12 @@ window.FIREBASE_VAPID_KEY =
     confetti: $("confetti"),
   };
 
+  // 記録の流れ：1 ちょいステップ → 2 勉強の記録 → 3 証拠写真 → 4 確認テスト → 完了
   const screens = {
     1: $("step1"),
-    2: $("step2"),
-    3: $("step3"),
+    2: $("stepStudy"),
+    3: $("step2"),
+    4: $("step3"),
     done: $("stepDone"),
   };
 
@@ -1000,6 +1102,8 @@ window.FIREBASE_VAPID_KEY =
     quiz: null,         // { topic, questions: [...] }
     currentIndex: 0,    // 現在の問題番号
     correctCount: 0,    // 正解数
+    studyBook: "",      // 選んだ教材（未選択なら空）
+    studyMinutes: 0,    // 勉強時間（分）
   };
 
   /* ----------------------------------------------------------
@@ -1052,7 +1156,7 @@ window.FIREBASE_VAPID_KEY =
     });
 
     // ステッパーの表示更新
-    const current = name === "done" ? 4 : Number(name);
+    const current = name === "done" ? 5 : Number(name);
     el.stepper.querySelectorAll(".step").forEach((s) => {
       const n = Number(s.dataset.step);
       s.classList.toggle("active", n === current);
@@ -1281,6 +1385,7 @@ window.FIREBASE_VAPID_KEY =
         writeLocal(STORAGE_KEYS.apiKey, d.apiKey || null);
         writeLocal(STORAGE_KEYS.model, d.model || null);
         writeLocal(STORAGE_KEYS.customSteps, JSON.stringify(d.customSteps || []));
+        writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
         writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
@@ -1306,6 +1411,7 @@ window.FIREBASE_VAPID_KEY =
       apiKey: storage.get(STORAGE_KEYS.apiKey, ""),
       model: storage.get(STORAGE_KEYS.model, ""),
       customSteps: storage.getJSON(STORAGE_KEYS.customSteps, []),
+      books: getBooks(),
       updatedAt: serverTimestamp(),
     };
     // 達成履歴は上書きせず追加する（別の端末で達成した日が消えないように）
@@ -1346,6 +1452,7 @@ window.FIREBASE_VAPID_KEY =
     el.modelSelect.value = getModel();
     updateApiKeyStatus();
     renderShortSteps();
+    renderBookList();
     renderStats();
   }
 
@@ -1634,6 +1741,13 @@ window.FIREBASE_VAPID_KEY =
     el.streakCount.textContent = calcStreak(history);
     el.startBtn.textContent = doneToday ? "もう一度チャレンジする" : "今日のちょいステップを始める";
 
+    // 今日・今週（月曜はじまり）の勉強時間
+    const logs = getLogs();
+    const weekStart = dateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)));
+    const todayMin = logs.filter((l) => l.date === dateKey(now)).reduce((sum, l) => sum + (l.minutes || 0), 0);
+    const weekMin = logs.filter((l) => l.date >= weekStart).reduce((sum, l) => sum + (l.minutes || 0), 0);
+    el.homeStudyTime.textContent = `⏱ 今日 ${formatMinutes(todayMin)} ・ 今週 ${formatMinutes(weekMin)}`;
+
     // 今週（月曜はじまり）の達成
     el.weekRow.innerHTML = "";
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
@@ -1709,7 +1823,9 @@ window.FIREBASE_VAPID_KEY =
       const sub = document.createElement("p");
       sub.className = "text-xs text-slate-500";
       const parts = [];
-      if (log.steps) parts.push(`ステップ ${log.steps}個`);
+      if (log.book) parts.push(`📚 ${log.book}`);
+      if (log.minutes) parts.push(`⏱ ${formatMinutes(log.minutes)}`);
+      if (log.steps && !log.book && !log.minutes) parts.push(`ステップ ${log.steps}個`);
       if (time) parts.push(`${time.getHours()}:${String(time.getMinutes()).padStart(2, "0")}`);
       sub.textContent = parts.join(" ・ ");
       body.append(topic, sub);
@@ -1753,6 +1869,8 @@ window.FIREBASE_VAPID_KEY =
       cell.textContent = day;
       el.calGrid.append(cell);
     }
+
+    renderBookTotals();
 
     el.badgeGrid.innerHTML = "";
     BADGES.forEach((b) => el.badgeGrid.append(badgeTile(b, !badgeProgress(b, history).earned)));
@@ -2108,6 +2226,12 @@ window.FIREBASE_VAPID_KEY =
 - explanation は1〜2文で簡潔に
 - 写真が不鮮明、または学習内容が読み取れない場合は、写っている物から推測できる一般的な学習内容で問題を作り、topic に「（推測）」と付ける`;
 
+  // 教材が選ばれていれば、問題作りの参考としてAIに伝える
+  function buildQuizPrompt() {
+    if (!state.studyBook) return QUIZ_PROMPT;
+    return `${QUIZ_PROMPT}\n\n参考：ユーザーが勉強している教材は「${state.studyBook}」です。写真の内容を優先し、教材名はテーマの推測に使ってください。`;
+  }
+
   /**
    * 画像を Gemini に送って3問のクイズを生成する
    * @returns {Promise<{topic:string, questions:Array}>}
@@ -2119,7 +2243,7 @@ window.FIREBASE_VAPID_KEY =
           role: "user",
           parts: [
             { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: QUIZ_PROMPT },
+            { text: buildQuizPrompt() },
           ],
         },
       ],
@@ -2249,7 +2373,7 @@ window.FIREBASE_VAPID_KEY =
       });
       try {
         const result = await model.generateContent(
-          [QUIZ_PROMPT, { inlineData: { mimeType, data: base64 } }],
+          [buildQuizPrompt(), { inlineData: { mimeType, data: base64 } }],
           { timeout: AI_TIMEOUT_MS }
         );
         const text = result.response.text();
@@ -2338,7 +2462,7 @@ window.FIREBASE_VAPID_KEY =
     state.quiz = { ...quiz, questions: quiz.questions.map(shuffleChoices) };
     state.currentIndex = 0;
     state.correctCount = 0;
-    showScreen(3);
+    showScreen(4);
     renderQuestion();
   }
 
@@ -2441,6 +2565,8 @@ window.FIREBASE_VAPID_KEY =
       correct: c,
       total,
       steps: state.checkedCount || 0,
+      book: state.studyBook || "",
+      minutes: state.studyMinutes || 0,
     });
     recordAchievement();
     renderStats();
@@ -2522,6 +2648,10 @@ window.FIREBASE_VAPID_KEY =
     el.generateBtn.disabled = true;
     hideError();
     renderShortSteps();
+    // 教材は前回のものを選んだままにし、時間は0から（タイマー中はそのまま）
+    if (!getBooks().includes(state.studyBook)) state.studyBook = "";
+    renderBookList();
+    setStudyMinutes(0);
     showScreen(1);
   }
 
@@ -2590,6 +2720,188 @@ window.FIREBASE_VAPID_KEY =
   }
 
   /* ==========================================================
+   * STEP2: 勉強の記録（教材と勉強時間）
+   * ========================================================== */
+  function getBooks() {
+    return storage.getJSON(STORAGE_KEYS.books, []);
+  }
+
+  // 例: 45 → "45分"、130 → "2時間10分"
+  function formatMinutes(min) {
+    if (!min) return "0分";
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return h ? `${h}時間${m ? `${m}分` : ""}` : `${m}分`;
+  }
+
+  function setStudyMinutes(min) {
+    state.studyMinutes = Math.max(0, Math.min(MAX_STUDY_MINUTES, Math.round(min)));
+    el.studyMinutes.textContent = state.studyMinutes;
+  }
+
+  // 教材の選択ボタン（もう一度押すと選択を外す）
+  function renderBookList() {
+    const books = getBooks();
+    el.bookList.innerHTML = "";
+    if (books.length === 0) {
+      const p = document.createElement("p");
+      p.className = "text-sm text-slate-400";
+      p.textContent = "まだ教材がありません。下から追加しよう";
+      el.bookList.append(p);
+    }
+    books.forEach((name) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `book-chip${state.studyBook === name ? " selected" : ""}`;
+      btn.textContent = name;
+      btn.addEventListener("click", () => {
+        state.studyBook = state.studyBook === name ? "" : name;
+        renderBookList();
+      });
+      el.bookList.append(btn);
+    });
+    renderBookManageList();
+  }
+
+  // 設定タブ：登録した教材の一覧（削除できる。過去の記録の教材名は残る）
+  function renderBookManageList() {
+    const books = getBooks();
+    el.bookManageList.innerHTML = "";
+    if (books.length === 0) {
+      const li = document.createElement("li");
+      li.className = "text-sm text-slate-400 py-2";
+      li.textContent = "まだありません";
+      el.bookManageList.append(li);
+      return;
+    }
+    books.forEach((name, i) => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between gap-2 py-2";
+      const span = document.createElement("span");
+      span.className = "text-sm truncate";
+      span.textContent = name;
+      const del = document.createElement("button");
+      del.className = "text-xs font-bold text-rose-500 px-2 py-1";
+      del.textContent = "削除";
+      del.addEventListener("click", () => {
+        const next = getBooks();
+        next.splice(i, 1);
+        storage.setJSON(STORAGE_KEYS.books, next);
+        if (state.studyBook === name) state.studyBook = "";
+        renderBookList();
+      });
+      li.append(span, del);
+      el.bookManageList.append(li);
+    });
+  }
+
+  // 記録タブ：教材ごとの合計勉強時間（多い順）
+  function renderBookTotals() {
+    const totals = {};
+    getLogs().forEach((l) => {
+      if (!l.minutes) return;
+      const name = l.book || "教材なし";
+      totals[name] = (totals[name] || 0) + l.minutes;
+    });
+    const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    el.bookTotals.innerHTML = "";
+    if (rows.length === 0) {
+      const p = document.createElement("p");
+      p.className = "empty-note";
+      p.textContent = "勉強時間を記録すると、ここに教材ごとの合計が出ます";
+      el.bookTotals.append(p);
+      return;
+    }
+    const max = rows[0][1];
+    rows.forEach(([name, min]) => {
+      const row = document.createElement("div");
+      const head = document.createElement("div");
+      head.className = "flex items-center justify-between gap-2 text-sm mb-1";
+      const label = document.createElement("span");
+      label.className = "font-bold truncate";
+      label.textContent = name;
+      const value = document.createElement("span");
+      value.className = "text-slate-500 whitespace-nowrap";
+      value.textContent = formatMinutes(min);
+      head.append(label, value);
+      const bar = document.createElement("div");
+      bar.className = "progress";
+      const fill = document.createElement("div");
+      fill.className = "progress-bar";
+      fill.style.width = `${(min / max) * 100}%`;
+      bar.append(fill);
+      row.append(head, bar);
+      el.bookTotals.append(row);
+    });
+  }
+
+  /* ---------- タイマー ---------- */
+  let timerTick = null;
+
+  function timerStartedAt() {
+    return Number(storage.get(TIMER_KEY, "")) || 0;
+  }
+
+  function renderTimer() {
+    const started = timerStartedAt();
+    el.timerBtn.classList.toggle("timer-running", !!started);
+    if (!started) {
+      el.timerBtn.textContent = "⏱ タイマーで計る";
+      return;
+    }
+    const sec = Math.floor((Date.now() - started) / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    el.timerBtn.textContent = `⏹ 止めて記録する（${mm}:${ss}）`;
+  }
+
+  // タイマーは開始時刻を保存するので、アプリを閉じても計り続けられる
+  function toggleTimer() {
+    const started = timerStartedAt();
+    if (started) {
+      const minutes = Math.max(1, Math.round((Date.now() - started) / 60000));
+      writeLocal(TIMER_KEY, null);
+      clearInterval(timerTick);
+      setStudyMinutes(state.studyMinutes + minutes);
+    } else {
+      writeLocal(TIMER_KEY, String(Date.now()));
+      timerTick = setInterval(renderTimer, 1000);
+    }
+    renderTimer();
+  }
+
+  function initStudy() {
+    el.addBookForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = el.newBookInput.value.trim();
+      if (!name) return;
+      const books = getBooks();
+      if (!books.includes(name)) {
+        books.push(name);
+        storage.setJSON(STORAGE_KEYS.books, books);
+      }
+      state.studyBook = name; // 追加した教材をそのまま選ぶ
+      el.newBookInput.value = "";
+      renderBookList();
+    });
+    el.minusTimeBtn.addEventListener("click", () => setStudyMinutes(state.studyMinutes - 5));
+    el.plusTimeBtn.addEventListener("click", () => setStudyMinutes(state.studyMinutes + 5));
+    el.timeChips.querySelectorAll("[data-min]").forEach((b) =>
+      b.addEventListener("click", () => setStudyMinutes(Number(b.dataset.min)))
+    );
+    el.timerBtn.addEventListener("click", toggleTimer);
+    el.studyNextBtn.addEventListener("click", () => {
+      if (timerStartedAt()) toggleTimer(); // タイマー中なら止めて時間を記録する
+      showScreen(3);
+    });
+
+    if (timerStartedAt()) timerTick = setInterval(renderTimer, 1000);
+    renderTimer();
+    renderBookList();
+    setStudyMinutes(0);
+  }
+
+  /* ==========================================================
    * タブ（ホーム / 記録 / 設定）と記録の流れ
    * ========================================================== */
   const TABS = {
@@ -2634,6 +2946,7 @@ window.FIREBASE_VAPID_KEY =
     initPhoto();
     initQuiz();
     initRecord();
+    initStudy();
     initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");
