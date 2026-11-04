@@ -191,6 +191,37 @@
     loading: $("loading"),
     loadingText: $("loadingText"),
     quizTiming: $("quizTiming"),
+    // ログイン（メールアドレス・Google）
+    authModal: $("authModal"),
+    authTitle: $("authTitle"),
+    authCloseBtn: $("authCloseBtn"),
+    authGoogleBtn: $("authGoogleBtn"),
+    authForm: $("authForm"),
+    authName: $("authName"),
+    authEmail: $("authEmail"),
+    authPassword: $("authPassword"),
+    authSubmitBtn: $("authSubmitBtn"),
+    authMsg: $("authMsg"),
+    authForgotBtn: $("authForgotBtn"),
+    authModeBtn: $("authModeBtn"),
+    // カレンダー連携・勉強プラン
+    calendarCard: $("calendarCard"),
+    calendarLinked: $("calendarLinked"),
+    calendarStatus: $("calendarStatus"),
+    calendarUnlinkBtn: $("calendarUnlinkBtn"),
+    calendarSetup: $("calendarSetup"),
+    calendarProviders: $("calendarProviders"),
+    calendarHowto: $("calendarHowto"),
+    calendarUrlInput: $("calendarUrlInput"),
+    calendarSaveBtn: $("calendarSaveBtn"),
+    calendarMsg: $("calendarMsg"),
+    planCard: $("planCard"),
+    planToggle: $("planToggle"),
+    planToday: $("planToday"),
+    planNote: $("planNote"),
+    planWeek: $("planWeek"),
+    planGoogleBtn: $("planGoogleBtn"),
+    planIcsBtn: $("planIcsBtn"),
     // リマインド通知
     notifyCard: $("notifyCard"),
     notifyStatus: $("notifyStatus"),
@@ -375,6 +406,8 @@
     appCheckMod: null, // firebase-app-check モジュール
     user: null,
     pulling: false, // アカウントから読み込み中は書き戻さない
+    calendar: null, // { url, busy, syncedAt, updatedAt, error } カレンダー連携の状態
+    unsubscribeDoc: null, // アカウントのデータの変更を見張るのをやめる関数
     pushTimer: null,
   };
 
@@ -388,9 +421,11 @@
     if (!config) return; // 未設定ならアカウント機能は使わない
 
     el.accountBar.classList.remove("hidden");
-    el.loginBtn.addEventListener("click", login);
-    el.homeLoginBtn.addEventListener("click", login);
+    el.loginBtn.addEventListener("click", openAuthModal);
+    el.homeLoginBtn.addEventListener("click", openAuthModal);
     el.logoutBtn.addEventListener("click", logout);
+    initAuthModal();
+    initCalendar();
 
     // Googleログインはファイルを直接開いた状態（file://）では使えない
     if (location.protocol === "file:") {
@@ -424,8 +459,13 @@
       authMod.onAuthStateChanged(cloud.auth, async (user) => {
         cloud.user = user;
         setAccountUI(user);
-        if (user) await pullFromCloud();
+        if (user) {
+          closeAuthModal();
+          await pullFromCloud();
+          watchUserDoc();
+        }
         renderNotifyUI();
+        renderCalendar();
       });
     } catch (err) {
       console.error(err);
@@ -463,9 +503,114 @@
       const msg =
         err.code === "auth/unauthorized-domain"
           ? "このURLはFirebaseで許可されていません（承認済みドメインに追加してください）"
-          : `ログインに失敗しました（${err.code || err.message}）`;
+          : authErrorMessage(err);
       setAccountUI(null, msg);
+      showAuthMsg(msg);
     }
+  }
+
+  /* ---------- メールアドレスでのログイン・アカウント作成 ---------- */
+  let authMode = "login"; // "login" | "signup"
+
+  function openAuthModal() {
+    if (!cloud.auth) return;
+    setAuthMode("login");
+    el.authMsg.classList.add("hidden");
+    el.authModal.classList.remove("hidden");
+  }
+
+  function closeAuthModal() {
+    el.authModal.classList.add("hidden");
+    el.authPassword.value = "";
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const signup = mode === "signup";
+    el.authTitle.textContent = signup ? "アカウントを作成" : "ログイン";
+    el.authSubmitBtn.textContent = signup ? "メールアドレスで登録する" : "メールアドレスでログイン";
+    el.authModeBtn.textContent = signup ? "すでにアカウントがある" : "アカウントを作成する";
+    el.authName.classList.toggle("hidden", !signup);
+    el.authForgotBtn.classList.toggle("invisible", signup);
+    el.authPassword.autocomplete = signup ? "new-password" : "current-password";
+    el.authMsg.classList.add("hidden");
+  }
+
+  function showAuthMsg(text, ok = false) {
+    el.authMsg.textContent = text;
+    el.authMsg.className = `text-sm mt-2 rounded-lg p-2 ${ok ? "msg-ok" : "msg-error"}`;
+  }
+
+  // Firebase のエラーを、利用者に分かる日本語にする
+  function authErrorMessage(err) {
+    const messages = {
+      "auth/invalid-email": "メールアドレスの形式が正しくありません",
+      "auth/missing-email": "メールアドレスを入力してください",
+      "auth/missing-password": "パスワードを入力してください",
+      "auth/weak-password": "パスワードは6文字以上にしてください",
+      "auth/email-already-in-use": "このメールアドレスはすでに登録されています。「すでにアカウントがある」からログインしてください（Googleで登録した場合は「Googleでログイン」）",
+      "auth/invalid-credential": "メールアドレスかパスワードが違います",
+      "auth/wrong-password": "メールアドレスかパスワードが違います",
+      "auth/user-not-found": "このメールアドレスのアカウントはありません。「アカウントを作成する」から登録してください",
+      "auth/too-many-requests": "何度も失敗したため、一時的にログインできません。しばらく待ってからお試しください",
+      "auth/network-request-failed": "通信に失敗しました。ネットワークを確認してください",
+      "auth/operation-not-allowed": "メールアドレスでのログインが有効になっていません（管理者の設定が必要です）",
+      "auth/popup-blocked": "ポップアップがブロックされました。ブラウザの設定で許可してください",
+    };
+    return messages[err?.code] || `ログインに失敗しました（${err?.code || err?.message}）`;
+  }
+
+  async function submitAuthForm(e) {
+    e.preventDefault();
+    const { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendEmailVerification } =
+      cloud.authMod;
+    const email = el.authEmail.value.trim();
+    const password = el.authPassword.value;
+    el.authSubmitBtn.disabled = true;
+    try {
+      if (authMode === "signup") {
+        const { user } = await createUserWithEmailAndPassword(cloud.auth, email, password);
+        const name = el.authName.value.trim();
+        if (name) {
+          await updateProfile(user, { displayName: name });
+          setAccountUI(user); // ログイン直後の表示はメールアドレスなので、ニックネームに更新する
+        }
+        // 確認メールは届かなくても使えるようにする（パスワードを忘れたときに必要になる）
+        sendEmailVerification(user).catch(() => {});
+      } else {
+        await signInWithEmailAndPassword(cloud.auth, email, password);
+      }
+      // ログインできたら onAuthStateChanged でシートを閉じる
+    } catch (err) {
+      console.error(err);
+      showAuthMsg(authErrorMessage(err));
+    } finally {
+      el.authSubmitBtn.disabled = false;
+    }
+  }
+
+  async function sendPasswordReset() {
+    const email = el.authEmail.value.trim();
+    if (!email) {
+      showAuthMsg("パスワードを再設定するメールアドレスを入力してください");
+      el.authEmail.focus();
+      return;
+    }
+    try {
+      await cloud.authMod.sendPasswordResetEmail(cloud.auth, email);
+      showAuthMsg(`${email} にパスワード再設定のメールを送りました（届かないときは迷惑メールも確認してください）`, true);
+    } catch (err) {
+      showAuthMsg(authErrorMessage(err));
+    }
+  }
+
+  function initAuthModal() {
+    el.authCloseBtn.addEventListener("click", closeAuthModal);
+    el.authModal.addEventListener("click", (e) => e.target === el.authModal && closeAuthModal());
+    el.authGoogleBtn.addEventListener("click", login);
+    el.authForm.addEventListener("submit", submitAuthForm);
+    el.authForgotBtn.addEventListener("click", sendPasswordReset);
+    el.authModeBtn.addEventListener("click", () => setAuthMode(authMode === "login" ? "signup" : "login"));
   }
 
   async function logout() {
@@ -478,6 +623,9 @@
     }
     // ログアウトした端末に、その人の通知が届き続けないようにする
     if (getLocalNotifyToken()) await disableNotify().catch(() => {});
+    cloud.unsubscribeDoc?.();
+    cloud.unsubscribeDoc = null;
+    cloud.calendar = null;
     await cloud.authMod.signOut(cloud.auth);
     // 次に使う人に記録やAPIキーが見えないよう、この端末のデータを消す
     Object.values(STORAGE_KEYS).forEach((key) => {
@@ -754,6 +902,311 @@
   }
 
   /* ==========================================================
+   * カレンダー連携と勉強プラン
+   * ----------------------------------------------------------
+   * - 利用者が貼った「カレンダーの非公開URL（iCal形式）」を users/{uid}.calendarUrl に保存する
+   * - GitHub Actions（scripts/sync-calendars.mjs）が予定の入っている時間帯だけを読み取り、
+   *   users/{uid}.calendarBusy に保存する（ブラウザからは他サイトのカレンダーを直接読めないため）
+   * - アプリはその時間帯を避けて、アンケートの「勉強しやすい時間帯」「1日の目標時間」から
+   *   毎日の勉強プランを立てる
+   * ========================================================== */
+  const CALENDAR_HOWTO = {
+    google: [
+      "パソコンで Googleカレンダー を開き、右上の ⚙️ →「設定」",
+      "左の「マイカレンダーの設定」で、自分のカレンダーを選ぶ",
+      "下の方の「iCal 形式の非公開URL」をコピーする（「公開URL」ではない方）",
+      "下の欄に貼り付けて「連携する」",
+    ],
+    icloud: [
+      "iPhone の「カレンダー」アプリで、画面下の「カレンダー」をタップ",
+      "使っているカレンダーの右の ⓘ をタップ",
+      "「公開カレンダー」をオンにして「リンクを共有」→「コピー」",
+      "下の欄に貼り付けて「連携する」（リンクを知っている人は予定を見られるので、他の人には教えないでください）",
+    ],
+    outlook: [
+      "ブラウザで Outlook.com を開き、⚙️ 設定 →「予定表」→「共有予定表」",
+      "「予定表を公開する」で、カレンダーと「空き時間情報のみ表示」を選んで「公開」",
+      "表示された「ICS」のリンクをコピーする",
+      "下の欄に貼り付けて「連携する」",
+    ],
+  };
+
+  // アンケートの「勉強しやすい時間帯」→ 探す時間の範囲（0時からの分）
+  const TIME_WINDOWS = {
+    朝: [6 * 60, 8 * 60 + 30],
+    昼休み: [12 * 60, 13 * 60],
+    "放課後・仕事のあと": [16 * 60, 19 * 60],
+    夜: [19 * 60, 22 * 60],
+    寝る前: [21 * 60 + 30, 23 * 60 + 30],
+  };
+  const WIDE_WINDOW = [7 * 60, 23 * 60]; // 希望の時間帯が埋まっているときに探す範囲
+  const PLAN_BUFFER_MIN = 10; // 予定の前後は少しあける
+  const PLAN_DAYS = 7;
+
+  // アカウントのデータの変更を見張る（GitHub Actions がカレンダーを読み込んだら、すぐ画面に出す）
+  function watchUserDoc() {
+    cloud.unsubscribeDoc?.();
+    cloud.unsubscribeDoc = cloud.fsMod.onSnapshot(
+      userDocRef(),
+      (snap) => {
+        const d = snap.data() || {};
+        cloud.calendar = d.calendarUrl
+          ? {
+              url: d.calendarUrl,
+              busy: Array.isArray(d.calendarBusy) ? d.calendarBusy : null,
+              syncedAt: d.calendarSyncedAt?.toMillis?.() || 0,
+              updatedAt: d.calendarUpdatedAt?.toMillis?.() || 0,
+              error: d.calendarError || "",
+            }
+          : null;
+        renderCalendar();
+      },
+      (err) => console.error(err)
+    );
+  }
+
+  let calendarProvider = "google";
+
+  function initCalendar() {
+    el.calendarProviders.querySelectorAll("[data-provider]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        calendarProvider = btn.dataset.provider;
+        renderCalendar();
+      })
+    );
+    el.calendarSaveBtn.addEventListener("click", saveCalendarUrl);
+    el.calendarUnlinkBtn.addEventListener("click", unlinkCalendar);
+    el.planToggle.addEventListener("click", () => {
+      const open = el.planWeek.classList.toggle("hidden");
+      el.planToggle.textContent = open ? "7日分を見る" : "閉じる";
+    });
+    el.planIcsBtn.addEventListener("click", downloadPlanIcs);
+  }
+
+  async function saveCalendarUrl() {
+    const url = el.calendarUrlInput.value.trim();
+    el.calendarMsg.textContent = "";
+    if (!/^(https?|webcals?):\/\/\S+$/i.test(url)) {
+      el.calendarMsg.textContent = "https:// か webcal:// で始まるURLを貼り付けてください";
+      return;
+    }
+    const { setDoc, serverTimestamp, deleteField } = cloud.fsMod;
+    el.calendarSaveBtn.disabled = true;
+    try {
+      await setDoc(
+        userDocRef(),
+        { calendarUrl: url, calendarUpdatedAt: serverTimestamp(), calendarError: deleteField(), calendarBusy: deleteField() },
+        { merge: true }
+      );
+      el.calendarUrlInput.value = "";
+    } catch (err) {
+      console.error(err);
+      el.calendarMsg.textContent = "保存できませんでした。もう一度お試しください";
+    } finally {
+      el.calendarSaveBtn.disabled = false;
+    }
+  }
+
+  async function unlinkCalendar() {
+    const { setDoc, deleteField } = cloud.fsMod;
+    await setDoc(
+      userDocRef(),
+      {
+        calendarUrl: deleteField(),
+        calendarBusy: deleteField(),
+        calendarSyncedAt: deleteField(),
+        calendarUpdatedAt: deleteField(),
+        calendarError: deleteField(),
+      },
+      { merge: true }
+    ).catch((err) => console.error(err));
+  }
+
+  function formatClock(date) {
+    return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function renderCalendar() {
+    const loggedIn = !!cloud.user;
+    el.calendarCard.classList.toggle("hidden", !loggedIn);
+    const cal = cloud.calendar;
+    el.calendarLinked.classList.toggle("hidden", !cal);
+    el.calendarSetup.classList.toggle("hidden", !!cal);
+
+    el.calendarProviders.querySelectorAll("[data-provider]").forEach((btn) =>
+      btn.classList.toggle("selected", btn.dataset.provider === calendarProvider)
+    );
+    el.calendarHowto.innerHTML = "";
+    CALENDAR_HOWTO[calendarProvider].forEach((text) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      el.calendarHowto.append(li);
+    });
+
+    if (cal) {
+      const waiting = !cal.syncedAt || cal.updatedAt > cal.syncedAt;
+      el.calendarStatus.className = `text-sm ${cal.error && !waiting ? "text-rose-600" : "text-slate-700"}`;
+      el.calendarStatus.textContent = waiting
+        ? "✅ 連携しました。予定を読み込み中です（最大15分ほどかかります）"
+        : cal.error
+          ? `⚠️ ${cal.error}。URLを確かめて、連携し直してください`
+          : `✅ 連携中（${formatClock(new Date(cal.syncedAt))} に読み込み・これから8日間の予定 ${cal.busy?.length || 0} 件）`;
+    }
+    renderPlan();
+  }
+
+  /**
+   * カレンダーの空き時間から、今日から PLAN_DAYS 日分の勉強時間を1日1つずつ決める。
+   * 希望の時間帯 → 広い時間帯 → 時間を短くして、の順に探す。
+   * @returns {{ day: Date, start?: Date, end?: Date, minutes?: number, relaxed?: string }[]}
+   */
+  function buildStudyPlan(busy, profile, now = new Date()) {
+    const target = Math.min(profile.dailyTarget || 15, 120);
+    const preferred = (profile.studyTimes || []).map((t) => TIME_WINDOWS[t]).filter(Boolean);
+    const windows = preferred.length ? preferred : [TIME_WINDOWS["夜"]];
+    const blocks = (busy || []).map((b) => ({ s: b.s - PLAN_BUFFER_MIN * 60000, e: b.e + PLAN_BUFFER_MIN * 60000 }));
+    const isFree = (s, e) => !blocks.some((b) => s < b.e && e > b.s);
+
+    // 空いている最初の時間を、15分刻みで探す
+    const find = (day, [from, to], minutes) => {
+      for (let m = from; m + minutes <= to; m += 15) {
+        const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(m / 60), m % 60);
+        const end = new Date(start.getTime() + minutes * 60000);
+        if (start < new Date(now.getTime() + 5 * 60000)) continue; // もう過ぎた時間は使わない
+        if (isFree(start.getTime(), end.getTime())) return { start, end, minutes };
+      }
+      return null;
+    };
+
+    const plan = [];
+    for (let i = 0; i < PLAN_DAYS; i++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      let slot = null;
+      for (const w of windows) if (!slot) slot = find(day, w, target);
+      if (!slot) {
+        const wide = find(day, WIDE_WINDOW, target);
+        if (wide) slot = { ...wide, relaxed: "time" };
+      }
+      if (!slot && target > 5) {
+        const short = find(day, WIDE_WINDOW, 5);
+        if (short) slot = { ...short, relaxed: "short" };
+      }
+      plan.push({ day, ...(slot || {}) });
+    }
+    return plan;
+  }
+
+  let currentPlan = [];
+
+  function renderPlan() {
+    const cal = cloud.calendar;
+    const show = !!(cloud.user && cal);
+    el.planCard.classList.toggle("hidden", !show);
+    if (!show) return;
+
+    if (!cal.busy) {
+      el.planToday.textContent = "カレンダーを読み込み中…";
+      el.planNote.textContent = "連携してから最大15分ほどで、空き時間からプランを立てます";
+      el.planWeek.innerHTML = "";
+      el.planGoogleBtn.classList.add("hidden");
+      el.planIcsBtn.classList.add("hidden");
+      return;
+    }
+
+    const profile = getProfile();
+    currentPlan = buildStudyPlan(cal.busy, profile);
+    const today = currentPlan[0];
+    const doneToday = getHistory().includes(dateKey());
+    const timeText = (p) => `${formatClock(p.start)}〜${formatClock(p.end)}（${p.minutes}分）`;
+
+    if (doneToday) {
+      el.planToday.textContent = "今日はもう達成済み！🎉";
+      const tomorrow = currentPlan[1];
+      el.planNote.textContent = tomorrow?.start ? `明日は ${timeText(tomorrow)} があいています` : "";
+    } else if (today.start) {
+      el.planToday.textContent = `${timeText(today)} がおすすめ`;
+      el.planNote.textContent =
+        today.relaxed === "short"
+          ? "今日は予定が多いので、5分だけでもOK"
+          : today.relaxed === "time"
+            ? "希望の時間帯は予定が入っているので、空いている時間にしました"
+            : "カレンダーの空き時間から選びました";
+    } else {
+      el.planToday.textContent = "今日はもう空き時間がなさそう";
+      el.planNote.textContent = "ちょいステップを1つだけでもOK。明日のプランは「7日分を見る」から";
+    }
+
+    el.planWeek.innerHTML = "";
+    currentPlan.forEach((p, i) => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between gap-2 py-2";
+      const day = document.createElement("span");
+      day.className = "font-bold text-slate-700";
+      day.textContent = `${i === 0 ? "今日" : i === 1 ? "明日" : `${p.day.getMonth() + 1}/${p.day.getDate()}`}（${WEEKDAYS[p.day.getDay()]}）`;
+      const time = document.createElement("span");
+      time.className = p.start ? "text-slate-600" : "text-slate-400";
+      time.textContent = p.start ? timeText(p) : "空き時間なし";
+      li.append(day, time);
+      el.planWeek.append(li);
+    });
+
+    // カレンダーに入れるボタン：今日（達成済みなら明日）の予定
+    const target = (doneToday ? currentPlan[1] : today)?.start ? (doneToday ? currentPlan[1] : today) : currentPlan.find((p) => p.start);
+    el.planGoogleBtn.classList.toggle("hidden", !target);
+    el.planIcsBtn.classList.toggle("hidden", !currentPlan.some((p) => p.start));
+    if (target) el.planGoogleBtn.href = googleCalendarUrl(target);
+  }
+
+  // iCal / Google カレンダー用の日時（UTC）
+  function toIcsUtc(date) {
+    return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  }
+
+  const PLAN_EVENT_TITLE = "📚 ちょいステップ（勉強）";
+  const APP_URL = "https://askedkazu.github.io/habit-app/";
+
+  function googleCalendarUrl(p) {
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: PLAN_EVENT_TITLE,
+      dates: `${toIcsUtc(p.start)}/${toIcsUtc(p.end)}`,
+      details: `今日のちょいステップ。机に座るだけでもOK！\n${APP_URL}`,
+    });
+    return `https://calendar.google.com/calendar/render?${params}`;
+  }
+
+  // 7日分のプランを .ics ファイルにして渡す（iPhone・Outlook などのカレンダーに入れられる）
+  function downloadPlanIcs() {
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//chotto-step//study-plan//JA", "CALSCALE:GREGORIAN"];
+    currentPlan
+      .filter((p) => p.start)
+      .forEach((p) => {
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:chotto-step-${dateKey(p.day)}@askedkazu.github.io`,
+          `DTSTAMP:${toIcsUtc(new Date())}`,
+          `DTSTART:${toIcsUtc(p.start)}`,
+          `DTEND:${toIcsUtc(p.end)}`,
+          `SUMMARY:${PLAN_EVENT_TITLE}`,
+          `DESCRIPTION:今日のちょいステップ。机に座るだけでもOK！\\n${APP_URL}`,
+          "BEGIN:VALARM",
+          "TRIGGER:-PT5M",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:${PLAN_EVENT_TITLE}`,
+          "END:VALARM",
+          "END:VEVENT"
+        );
+      });
+    lines.push("END:VCALENDAR");
+    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "chotto-step-plan.ics";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  }
+
+  /* ==========================================================
    * 達成履歴（連続日数・累計）
    * ========================================================== */
   // ローカル時刻ベースで YYYY-MM-DD を返す
@@ -942,6 +1395,7 @@
     }
 
     renderLogList(el.recentLogs, getLogs().reverse().slice(0, 3));
+    if (cloud.calendar) renderPlan(); // 達成したらプランの表示も変える
   }
 
   // 記録の一覧（新しい順）を描画する

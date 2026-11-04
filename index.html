@@ -77,6 +77,21 @@
         </div>
       </section>
 
+      <!-- カレンダーの空き時間から立てた勉強プラン（カレンダー連携中だけ表示） -->
+      <section id="planCard" class="hidden card mt-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-xs font-bold text-slate-500">📅 今日の勉強プラン</p>
+          <button id="planToggle" class="link-btn">7日分を見る</button>
+        </div>
+        <p id="planToday" class="text-base font-bold text-slate-800 mt-1"></p>
+        <p id="planNote" class="text-xs text-slate-500 mt-0.5"></p>
+        <ul id="planWeek" class="hidden mt-3 divide-y divide-slate-100 text-sm"></ul>
+        <div class="flex gap-2 mt-3">
+          <a id="planGoogleBtn" class="btn-ghost text-xs flex-1 text-center" target="_blank" rel="noopener">＋ Googleカレンダー</a>
+          <button id="planIcsBtn" class="btn-ghost text-xs flex-1">＋ ほかのカレンダー</button>
+        </div>
+      </section>
+
       <!-- ログインのおすすめ（ログイン機能があって未ログインのとき） -->
       <section id="homeLoginNudge" class="hidden card mt-4 flex items-center gap-3">
         <div class="text-2xl">🔑</div>
@@ -200,6 +215,31 @@
         </div>
         <button id="notifyOnBtn" class="btn-primary w-full mt-3 text-sm">この端末で通知を受け取る</button>
         <button id="notifyOffBtn" class="hidden btn-ghost w-full mt-3 text-sm">この端末の通知をやめる</button>
+      </section>
+
+      <!-- カレンダー連携（ログイン中だけ表示） -->
+      <section id="calendarCard" class="hidden card">
+        <p class="text-sm font-bold">📅 カレンダー連携</p>
+        <p class="text-xs text-slate-500 mt-0.5">予定の入っている時間を読み取って、空き時間に勉強プランを立てます。予定の名前や内容は保存しません。</p>
+
+        <div id="calendarLinked" class="hidden mt-3">
+          <p id="calendarStatus" class="text-sm"></p>
+          <button id="calendarUnlinkBtn" class="btn-ghost w-full mt-3 text-sm">連携をやめる</button>
+        </div>
+
+        <div id="calendarSetup" class="mt-3">
+          <p class="field-label">使っているカレンダー</p>
+          <div id="calendarProviders" class="flex flex-wrap gap-2">
+            <button type="button" class="book-chip selected" data-provider="google">Google</button>
+            <button type="button" class="book-chip" data-provider="icloud">iPhone（iCloud）</button>
+            <button type="button" class="book-chip" data-provider="outlook">Outlook</button>
+          </div>
+          <ol id="calendarHowto" class="text-xs text-slate-600 mt-3 space-y-1 list-decimal pl-5"></ol>
+          <input id="calendarUrlInput" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+                 placeholder="https://… または webcal://… のURLを貼り付け" class="input w-full mt-3" />
+          <button id="calendarSaveBtn" class="btn-primary w-full mt-2 text-sm">連携する</button>
+          <p id="calendarMsg" class="text-xs text-rose-500 mt-2"></p>
+        </div>
       </section>
 
       <!-- 教材 -->
@@ -429,6 +469,38 @@
         <span>設定</span>
       </button>
     </nav>
+  </div>
+
+  <!-- ログイン・アカウント作成 -->
+  <div id="authModal" class="hidden modal-backdrop">
+    <section class="modal-sheet">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="authTitle" class="font-bold text-lg">ログイン</h2>
+        <button id="authCloseBtn" class="icon-btn" aria-label="閉じる">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <button id="authGoogleBtn" class="google-btn w-full">
+        <svg class="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        Googleでログイン
+      </button>
+
+      <div class="divider"><span>またはメールアドレスで</span></div>
+
+      <form id="authForm" class="space-y-2" novalidate>
+        <input id="authName" type="text" maxlength="20" autocomplete="nickname" placeholder="ニックネーム（任意）" class="hidden input w-full" />
+        <input id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="メールアドレス" class="input w-full" />
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="パスワード（6文字以上）" class="input w-full" />
+        <button id="authSubmitBtn" type="submit" class="btn-primary w-full py-3">ログイン</button>
+      </form>
+      <p id="authMsg" class="hidden text-sm mt-2 rounded-lg p-2"></p>
+
+      <div class="flex items-center justify-between mt-3 text-sm">
+        <button id="authForgotBtn" class="text-slate-500 underline">パスワードを忘れた</button>
+        <button id="authModeBtn" class="link-btn">アカウントを作成する</button>
+      </div>
+    </section>
   </div>
 
   <!-- 紙吹雪用レイヤー -->

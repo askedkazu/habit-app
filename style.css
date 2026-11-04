@@ -322,6 +322,48 @@ body {
 /* アンケートで、答えに応じて出てくる質問 */
 .reveal { animation: fadeIn 0.25s ease-out; }
 
+/* ログインのシート */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  animation: fadeIn 0.15s ease-out;
+}
+.modal-sheet {
+  width: 100%;
+  max-width: 28rem;
+  background: #fff;
+  border-radius: 1.25rem 1.25rem 0 0;
+  padding: 1.1rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));
+  max-height: 92vh;
+  overflow-y: auto;
+}
+@media (min-width: 640px) {
+  .modal-backdrop { align-items: center; }
+  .modal-sheet { border-radius: 1.25rem; }
+}
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d5dbe2;
+  border-radius: 0.8rem;
+  font-weight: 700;
+  color: #1f2937;
+  background: #fff;
+}
+.google-btn:hover { background: #f8fafc; }
+.divider { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0 0.75rem; font-size: 0.75rem; color: #94a3b8; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.msg-error { background: #fff1f2; color: #be123c; }
+.msg-ok { background: #ecfdf3; color: #15803d; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
