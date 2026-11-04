@@ -32,10 +32,11 @@
   const TIMER_KEY = "habitApp.timerStart";
   const MAX_STUDY_MINUTES = 600;
 
-  // 既定のモデル。提供終了になった場合はここ（または画面の設定欄）を変更する
+  // 既定のモデル（自分のAPIキーで使うとき）。提供終了になった場合はここ（または画面の設定欄）を変更する
   const DEFAULT_MODEL = "gemini-3.8-flash";
-  // 既定のモデルが混雑などで答えないときに使う、軽くて速い予備のモデル（Firebase 経由のとき）
-  const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+  // Firebase 経由で最初に使う、軽くて速いモデル。gemini-3.8-flash は無料枠（全員で1日20回ほど）の
+  // 混雑で30秒以内に答えないことがほとんどだったため、こちらを先に使い、だめなときだけ DEFAULT_MODEL で作り直す
+  const FAST_MODEL = "gemini-3.5-flash-lite";
   // 1回の問い合わせを打ち切るまでの時間。SDK の既定は180秒で、混雑時に3分待たされていた
   const AI_TIMEOUT_MS = 30_000;
   // 新規ユーザーには提供終了になった旧モデル。保存されていたら既定モデルに置き換える
@@ -2356,15 +2357,15 @@
       },
     });
 
-    // 試す順番：いつものモデル → だめなら軽くて速い予備のモデル
+    // 試す順番：軽くて速いモデル → だめならいつものモデル
     const attempts = [
+      { label: "AIで問題を作成", model: FAST_MODEL },
       {
-        label: "AIで問題を作成",
+        label: "予備のAIで問題を作成",
         model: DEFAULT_MODEL,
         // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
-      { label: "予備のAIで問題を作成", model: FALLBACK_MODEL },
     ];
 
     // App Check の確認（初回は reCAPTCHA の読み込みがあるので、AIとは分けて計測する）
