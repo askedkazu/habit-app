@@ -4225,10 +4225,9 @@ window.FIREBASE_VAPID_KEY =
       ],
     },
     {
-      title: "勉強時間について教えてください",
-      sub: "今の時間が少なくても大丈夫。ここから伸ばしていこう",
+      title: "1日どれくらい勉強したいですか？",
+      sub: "ホームで今日の進み具合が分かるようになります",
       fields: [
-        { key: "currentMinutes", label: "今、1日どれくらい勉強してる？", type: "single", options: ["ほぼ0分", "15分くらい", "30分くらい", "1時間くらい", "2時間以上"] },
         {
           key: "dailyTarget",
           label: "1日の目標時間",
@@ -4240,22 +4239,11 @@ window.FIREBASE_VAPID_KEY =
       ],
     },
     {
-      title: "いつ・どこで勉強しますか？",
-      sub: "いくつでも選べます",
+      title: "いつ勉強しやすいですか？",
+      sub: "カレンダーを連携すると、この時間帯の空きからおすすめします（いくつでも選べます）",
       fields: [
         { key: "studyTimes", label: "勉強しやすい時間帯", type: "multi", options: ["朝", "昼休み", "放課後・仕事のあと", "夜", "寝る前", "バラバラ"] },
-        { key: "places", label: "よく勉強する場所", type: "multi", options: ["家", "学校", "図書館", "カフェ", "電車・バス", "職場"] },
       ],
-    },
-    {
-      title: "苦手な科目はありますか？",
-      sub: "いくつでも選べます",
-      fields: [{ key: "weakSubjects", label: "苦手な科目", type: "multi", options: ["英語", "数学", "国語", "理科", "社会", "特になし"] }],
-    },
-    {
-      title: "ふだんの忙しさを教えてください",
-      sub: "無理のないペースを一緒に考えます",
-      fields: [{ key: "busy", label: "部活・仕事・バイト", type: "single", options: ["ほとんどない", "週に2〜3日", "ほぼ毎日"] }],
     },
     {
       title: "勉強の悩みはありますか？",
@@ -4267,7 +4255,6 @@ window.FIREBASE_VAPID_KEY =
           type: "multi",
           options: ["続かない・三日坊主", "やる気が出ない", "ついスマホを触ってしまう", "勉強する時間がない", "何から始めればいいか分からない", "集中できない", "覚えてもすぐ忘れる"],
         },
-        { key: "worryNote", label: "そのほか（任意）", type: "text", placeholder: "自由に書いてOK", maxLength: 100 },
       ],
     },
     {
@@ -4326,8 +4313,12 @@ window.FIREBASE_VAPID_KEY =
   }
 
   // 答えを保存してホームへ（「あとで」でも、それまでの答えは保存する）
+  // 以前のアンケートで聞いていたが、使い道がないのでやめた質問（答え直したときに消す）
+  const RETIRED_PROFILE_KEYS = ["currentMinutes", "places", "weakSubjects", "busy", "worryNote"];
+
   function finishOnboarding() {
     const { steps, ...profile } = onboarding.draft;
+    RETIRED_PROFILE_KEYS.forEach((key) => delete profile[key]);
     if (steps?.length) saveSteps(steps); // 全部外した場合は、今までのステップのまま
     storage.setJSON(STORAGE_KEYS.profile, { ...profile, done: true, answeredAt: Date.now() });
     renderShortSteps();
@@ -4498,11 +4489,7 @@ window.FIREBASE_VAPID_KEY =
       ["1日の目標", p.dailyTarget ? `${p.dailyTarget}分` : ""],
       ["学年", p.grade],
       ["試験日", p.examDate ? `${p.examDate.replaceAll("-", "/")}${daysUntil(p.examDate) !== null ? `（あと${daysUntil(p.examDate)}日）` : ""}` : ""],
-      ["今の勉強時間", p.currentMinutes],
       ["時間帯", (p.studyTimes || []).join("、")],
-      ["場所", (p.places || []).join("、")],
-      ["苦手科目", (p.weakSubjects || []).join("、")],
-      ["部活・仕事", p.busy],
     ].filter(([, value]) => value); // 答えたものだけ表示
     el.profileSummary.innerHTML = "";
     if (rows.length === 0) {
