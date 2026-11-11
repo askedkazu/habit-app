@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>管理者ページ｜ちょいステップ習慣</title>
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="app-bg text-slate-800 min-h-screen">
+  <div class="max-w-5xl mx-auto px-4 pb-16">
+    <header class="flex items-center justify-between gap-3 py-4">
+      <div>
+        <h1 class="text-lg font-bold">管理者ページ</h1>
+        <p class="text-xs text-slate-500">利用者は名前やメールアドレスではなく「利用者 #記号」で表示します</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="adminWho" class="text-xs text-slate-500"></span>
+        <button id="adminLoginBtn" class="btn-primary text-sm">Googleでログイン</button>
+        <button id="adminLogoutBtn" class="hidden btn-ghost text-sm">ログアウト</button>
+      </div>
+    </header>
+
+    <!-- 権限がないとき：ルールに入れるUIDを表示 -->
+    <section id="adminDenied" class="hidden card mb-4">
+      <p class="font-bold text-rose-600">このアカウントには閲覧の権限がありません</p>
+      <p class="text-sm text-slate-600 mt-1">
+        Firebase コンソール → Firestore Database →「ルール」の <code>isAdmin()</code> に、次のUIDを入れて「公開」してください。
+      </p>
+      <div class="flex gap-2 mt-2">
+        <input id="adminUid" readonly class="input flex-1 min-w-0 font-mono text-xs" />
+        <button id="adminCopyUid" class="btn-ghost text-sm">コピー</button>
+      </div>
+    </section>
+
+    <p id="adminMsg" class="text-sm text-slate-500 mb-4">ログインすると表示します。</p>
+
+    <div id="adminBody" class="hidden">
+      <!-- タブ -->
+      <div class="flex gap-2 mb-4">
+        <button class="admin-tab book-chip selected" data-view="photos">📷 証拠写真</button>
+        <button class="admin-tab book-chip" data-view="users">👤 利用者</button>
+      </div>
+
+      <!-- 証拠写真 -->
+      <section id="viewPhotos">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <label class="text-sm font-bold text-slate-600">利用者で絞り込み
+            <select id="photoUserFilter" class="input ml-1"><option value="">すべて</option></select>
+          </label>
+          <span id="photoCountText" class="text-xs text-slate-500"></span>
+        </div>
+        <div id="photoList" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+        <button id="photoMoreBtn" class="hidden btn-ghost w-full mt-4 text-sm">もっと見る</button>
+      </section>
+
+      <!-- 利用者 -->
+      <section id="viewUsers" class="hidden">
+        <div id="userList" class="grid gap-3 lg:grid-cols-2"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 写真の拡大 -->
+  <div id="photoZoom" class="hidden modal-backdrop" style="align-items:center">
+    <img id="photoZoomImg" class="max-w-full max-h-[90vh] rounded-xl" alt="拡大した証拠写真" />
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

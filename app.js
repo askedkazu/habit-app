@@ -27,6 +27,7 @@
     books: "habitApp.books", // 登録した教材名の配列
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
+    savePhotos: "habitApp.savePhotos", // "0" なら証拠写真を保存しない（未設定・"1" なら保存する）
   };
   // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
   const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
@@ -50,6 +51,10 @@
   // Firebase SDK の読み込み元（アカウント機能を使うときだけ読み込む）
   const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 
+  // 管理者が確認できるよう保存する証拠写真の大きさ（長辺px・JPEGの画質）。Firestore の1件1MBの上限に収める
+  const SAVED_PHOTO_SIZE = 480;
+  const SAVED_PHOTO_QUALITY = 0.6;
+  const SAVED_PHOTO_MAX_BYTES = 250 * 1024; // これより大きくなった写真（縮小できなかったもの）は保存しない
   // 一度に送れる写真の枚数
   const MAX_PHOTOS = 4;
   // 写真が複数あるときは、通信量を抑えるため1枚あたりを少し小さくする
@@ -174,6 +179,10 @@
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
     analyticsToggle: $("analyticsToggle"),
+    savePhotosRow: $("savePhotosRow"),
+    savePhotosToggle: $("savePhotosToggle"),
+    photoSaveNote: $("photoSaveNote"),
+    photoSaveSpacer: $("photoSaveSpacer"),
     privacyModal: $("privacyModal"),
     privacyCloseBtn: $("privacyCloseBtn"),
     privacyOkBtn: $("privacyOkBtn"),
@@ -312,6 +321,7 @@
     studyBook: "",      // 選んだ教材（未選択なら空）
     studyMinutes: 0,    // 勉強時間（分）
     reportLogTs: null,  // 「あとで報告」の記録に写真を報告しているとき、その記録の ts
+    photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
   /* ----------------------------------------------------------
@@ -472,6 +482,13 @@
   function initPrivacy() {
     el.analyticsToggle.checked = !analyticsOptedOut();
     el.analyticsToggle.addEventListener("change", () => setAnalyticsEnabled(el.analyticsToggle.checked));
+    // 写真を保存するかはアカウントに保存（全端末共通）
+    el.savePhotosToggle.addEventListener("change", () => {
+      storage.set(STORAGE_KEYS.savePhotos, el.savePhotosToggle.checked ? "1" : "0");
+      track(el.savePhotosToggle.checked ? "photo_save_on" : "photo_save_off");
+      renderPhotoSaveNote();
+    });
+    renderPhotoSaveNote();
     const open = () => el.privacyModal.classList.remove("hidden");
     const close = () => el.privacyModal.classList.add("hidden");
     document.querySelectorAll(".privacy-link").forEach((b) => b.addEventListener("click", open));
@@ -555,6 +572,7 @@
       authMod.onAuthStateChanged(cloud.auth, async (user) => {
         cloud.user = user;
         setAccountUI(user);
+        renderPhotoSaveNote();
         if (user) {
           closeAuthModal();
           await pullFromCloud();
@@ -770,6 +788,7 @@
         // アカウントにまだ一覧がなければ、この端末の一覧を残す（次の保存でアカウントへ）
         if (d.steps?.length) writeLocal(STORAGE_KEYS.steps, JSON.stringify(d.steps));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
+        if (d.savePhotos !== undefined) writeLocal(STORAGE_KEYS.savePhotos, d.savePhotos ? "1" : "0");
         if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
@@ -802,6 +821,7 @@
       steps: getAllSteps(),
       books: getBooks(),
       profile: getProfile(),
+      savePhotos: savePhotosEnabled(),
       plans: getPlans(),
       updatedAt: serverTimestamp(),
     };
@@ -845,6 +865,7 @@
     renderShortSteps();
     renderBookList();
     renderProfileSummary();
+    renderPhotoSaveNote();
     renderStats();
     // ログインしたらアカウントに答えがあった → アンケートは閉じる
     if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab("home");
@@ -2244,6 +2265,10 @@
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
       const images = await Promise.all(state.photos.map((p) => fileToResizedBase64(p.file, size)));
       timing.imageKB = Math.round(images.reduce((sum, img) => sum + (img.base64.length * 3) / 4, 0) / 1024);
+      // 管理者が確認できるよう、さらに小さくしたものを取っておく（テストを解き終えたら保存する）
+      state.photoThumbs = useFirebase && savePhotosEnabled()
+        ? await Promise.all(state.photos.map((p) => fileToResizedBase64(p.file, SAVED_PHOTO_SIZE, SAVED_PHOTO_QUALITY))).catch(() => null)
+        : null;
       let quiz;
       if (useFirebase) {
         quiz = await generateQuizWithFirebase({ images });
@@ -2327,7 +2352,7 @@
    * スマホの写真は数MBあるため、長辺 maxSize px の JPEG に圧縮して送信する。
    * デコードできない形式（一部ブラウザでのHEIC等）は元データをそのまま返す。
    */
-  async function fileToResizedBase64(file, maxSize) {
+  async function fileToResizedBase64(file, maxSize, quality = 0.85) {
     try {
       const bitmap = await loadImage(file);
       const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
@@ -2339,7 +2364,7 @@
       canvas.height = h;
       canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
       return { base64: dataUrl.split(",")[1], mimeType: "image/jpeg" };
     } catch {
       // フォールバック：縮小せずにそのまま送る
@@ -2768,6 +2793,43 @@
   /* ==========================================================
    * 完了画面
    * ========================================================== */
+  /* ---------- 証拠写真の保存（管理者が確認できるように） ---------- */
+  function savePhotosEnabled() {
+    return storage.get(STORAGE_KEYS.savePhotos, "1") !== "0";
+  }
+
+  // テストを解き終えたら、小さく縮めた証拠写真を photos に保存する（60日たつと GitHub Actions が消す）
+  async function saveEvidencePhotos(meta) {
+    const thumbs = state.photoThumbs;
+    state.photoThumbs = null;
+    if (!thumbs?.length || !cloud.user || !savePhotosEnabled()) return;
+    const images = thumbs
+      .filter((t) => (t.base64.length * 3) / 4 <= SAVED_PHOTO_MAX_BYTES)
+      .map((t) => `data:${t.mimeType};base64,${t.base64}`);
+    if (!images.length) return;
+    try {
+      const { addDoc, collection } = cloud.fsMod;
+      await addDoc(collection(cloud.db, "photos"), {
+        uid: cloud.user.uid,
+        ts: Date.now(),
+        date: dateKey(),
+        ...meta,
+        images,
+      });
+    } catch (err) {
+      // 保存できなくても、利用者の記録には影響させない
+      console.error(err);
+    }
+  }
+
+  function renderPhotoSaveNote() {
+    const show = canUseFirebaseAI() && !!cloud.user && savePhotosEnabled();
+    el.photoSaveNote.classList.toggle("hidden", !show);
+    el.photoSaveSpacer.classList.toggle("hidden", show);
+    el.savePhotosRow.classList.toggle("hidden", !cloud.user);
+    el.savePhotosToggle.checked = savePhotosEnabled();
+  }
+
   /* ---------- 写真なしで記録 → あとで写真を報告 ---------- */
   // 写真なしでも、ちょいステップと勉強の記録だけで今日は達成にする（あとで写真を報告できる）
   function recordWithoutPhoto() {
@@ -2838,6 +2900,13 @@
     const total = state.quiz.questions.length;
     const c = state.correctCount;
     track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0 });
+    saveEvidencePhotos({
+      logTs: state.reportLogTs || null,
+      book: state.studyBook || "",
+      topic: state.quiz.topic || "",
+      correct: c,
+      total,
+    });
     if (state.reportLogTs) return finishReport();
     completeSession({ log: { topic: state.quiz.topic || "", correct: c, total } });
     showScoreMessage(c, total);

@@ -947,6 +947,12 @@ body {
           </span>
           <input id="analyticsToggle" type="checkbox" class="w-5 h-5 accent-sky-500 shrink-0" checked />
         </label>
+        <label id="savePhotosRow" class="hidden flex items-center justify-between gap-3 text-sm mt-3">
+          <span class="text-slate-700">証拠写真を保存して、管理者が確認できるようにする
+            <span class="block text-xs text-slate-500">小さく縮めた写真を60日間だけ保存します。オフにすると保存しません</span>
+          </span>
+          <input id="savePhotosToggle" type="checkbox" class="w-5 h-5 accent-sky-500 shrink-0" checked />
+        </label>
         <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
       </section>
 
@@ -1055,7 +1061,11 @@ body {
       <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
         <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
-        <p class="text-sm text-slate-500 mb-4">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。<span id="photoMaxNote"></span></p>
+        <p class="text-sm text-slate-500 mb-2">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。<span id="photoMaxNote"></span></p>
+        <p id="photoSaveNote" class="hidden text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-4">
+          📷 写真は小さく縮めて、アプリの管理者が確認できる形で保存されます（60日で自動削除）。設定タブの「プライバシー」でオフにできます
+        </p>
+        <div id="photoSaveSpacer" class="mb-2"></div>
 
         <!-- まだ写真がないときの枠（タップするとアルバムから選択） -->
         <label for="photoInput" id="photoDropzone" class="photo-drop">
@@ -1210,13 +1220,16 @@ body {
             <li>通知の設定と、通知を届けるための端末ごとの宛先</li>
             <li>カレンダー連携をしたときは、予定の入っている時間帯（予定の名前や内容は保存しません）と、URLで連携した場合はそのURL</li>
           </ul>
-          <p>これらは Google の Firebase（クラウド）に保存され、スマホとPCで共有されます。証拠写真は保存しません。</p>
+          <ul>
+            <li>証拠写真：小さく縮めたものを、日時・教材名・テストのテーマと正解数と一緒に<b>60日間</b>保存し、その後自動で削除します（設定タブの「プライバシー」で保存しないようにできます）</li>
+          </ul>
+          <p>これらは Google の Firebase（クラウド）に保存され、スマホとPCで共有されます。</p>
         </section>
         <section>
           <h3>誰が見られるか</h3>
           <ul>
             <li>あなたの記録は、あなたのアカウントでしか開けません。ほかの利用者からは見えません</li>
-            <li><b>アプリの管理者は、Firebase の管理画面で全員の保存内容を確認できます</b>。不具合の調査や改善のためだけに使います</li>
+            <li><b>アプリの管理者は、全員の保存内容（証拠写真・アンケートの答え・教材名・記録など）を確認できます</b>。管理者用の画面では名前やメールアドレスは出さず、「利用者 #a1b2c3」のような記号で表示します。不具合の調査やアプリの改善のためだけに使います</li>
           </ul>
         </section>
         <section>
@@ -1353,6 +1366,7 @@ window.FIREBASE_VAPID_KEY =
     books: "habitApp.books", // 登録した教材名の配列
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
+    savePhotos: "habitApp.savePhotos", // "0" なら証拠写真を保存しない（未設定・"1" なら保存する）
   };
   // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
   const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
@@ -1376,6 +1390,10 @@ window.FIREBASE_VAPID_KEY =
   // Firebase SDK の読み込み元（アカウント機能を使うときだけ読み込む）
   const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/12.19.0";
 
+  // 管理者が確認できるよう保存する証拠写真の大きさ（長辺px・JPEGの画質）。Firestore の1件1MBの上限に収める
+  const SAVED_PHOTO_SIZE = 480;
+  const SAVED_PHOTO_QUALITY = 0.6;
+  const SAVED_PHOTO_MAX_BYTES = 250 * 1024; // これより大きくなった写真（縮小できなかったもの）は保存しない
   // 一度に送れる写真の枚数
   const MAX_PHOTOS = 4;
   // 写真が複数あるときは、通信量を抑えるため1枚あたりを少し小さくする
@@ -1500,6 +1518,10 @@ window.FIREBASE_VAPID_KEY =
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
     analyticsToggle: $("analyticsToggle"),
+    savePhotosRow: $("savePhotosRow"),
+    savePhotosToggle: $("savePhotosToggle"),
+    photoSaveNote: $("photoSaveNote"),
+    photoSaveSpacer: $("photoSaveSpacer"),
     privacyModal: $("privacyModal"),
     privacyCloseBtn: $("privacyCloseBtn"),
     privacyOkBtn: $("privacyOkBtn"),
@@ -1638,6 +1660,7 @@ window.FIREBASE_VAPID_KEY =
     studyBook: "",      // 選んだ教材（未選択なら空）
     studyMinutes: 0,    // 勉強時間（分）
     reportLogTs: null,  // 「あとで報告」の記録に写真を報告しているとき、その記録の ts
+    photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
   /* ----------------------------------------------------------
@@ -1798,6 +1821,13 @@ window.FIREBASE_VAPID_KEY =
   function initPrivacy() {
     el.analyticsToggle.checked = !analyticsOptedOut();
     el.analyticsToggle.addEventListener("change", () => setAnalyticsEnabled(el.analyticsToggle.checked));
+    // 写真を保存するかはアカウントに保存（全端末共通）
+    el.savePhotosToggle.addEventListener("change", () => {
+      storage.set(STORAGE_KEYS.savePhotos, el.savePhotosToggle.checked ? "1" : "0");
+      track(el.savePhotosToggle.checked ? "photo_save_on" : "photo_save_off");
+      renderPhotoSaveNote();
+    });
+    renderPhotoSaveNote();
     const open = () => el.privacyModal.classList.remove("hidden");
     const close = () => el.privacyModal.classList.add("hidden");
     document.querySelectorAll(".privacy-link").forEach((b) => b.addEventListener("click", open));
@@ -1881,6 +1911,7 @@ window.FIREBASE_VAPID_KEY =
       authMod.onAuthStateChanged(cloud.auth, async (user) => {
         cloud.user = user;
         setAccountUI(user);
+        renderPhotoSaveNote();
         if (user) {
           closeAuthModal();
           await pullFromCloud();
@@ -2096,6 +2127,7 @@ window.FIREBASE_VAPID_KEY =
         // アカウントにまだ一覧がなければ、この端末の一覧を残す（次の保存でアカウントへ）
         if (d.steps?.length) writeLocal(STORAGE_KEYS.steps, JSON.stringify(d.steps));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
+        if (d.savePhotos !== undefined) writeLocal(STORAGE_KEYS.savePhotos, d.savePhotos ? "1" : "0");
         if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
@@ -2128,6 +2160,7 @@ window.FIREBASE_VAPID_KEY =
       steps: getAllSteps(),
       books: getBooks(),
       profile: getProfile(),
+      savePhotos: savePhotosEnabled(),
       plans: getPlans(),
       updatedAt: serverTimestamp(),
     };
@@ -2171,6 +2204,7 @@ window.FIREBASE_VAPID_KEY =
     renderShortSteps();
     renderBookList();
     renderProfileSummary();
+    renderPhotoSaveNote();
     renderStats();
     // ログインしたらアカウントに答えがあった → アンケートは閉じる
     if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab("home");
@@ -3570,6 +3604,10 @@ window.FIREBASE_VAPID_KEY =
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
       const images = await Promise.all(state.photos.map((p) => fileToResizedBase64(p.file, size)));
       timing.imageKB = Math.round(images.reduce((sum, img) => sum + (img.base64.length * 3) / 4, 0) / 1024);
+      // 管理者が確認できるよう、さらに小さくしたものを取っておく（テストを解き終えたら保存する）
+      state.photoThumbs = useFirebase && savePhotosEnabled()
+        ? await Promise.all(state.photos.map((p) => fileToResizedBase64(p.file, SAVED_PHOTO_SIZE, SAVED_PHOTO_QUALITY))).catch(() => null)
+        : null;
       let quiz;
       if (useFirebase) {
         quiz = await generateQuizWithFirebase({ images });
@@ -3653,7 +3691,7 @@ window.FIREBASE_VAPID_KEY =
    * スマホの写真は数MBあるため、長辺 maxSize px の JPEG に圧縮して送信する。
    * デコードできない形式（一部ブラウザでのHEIC等）は元データをそのまま返す。
    */
-  async function fileToResizedBase64(file, maxSize) {
+  async function fileToResizedBase64(file, maxSize, quality = 0.85) {
     try {
       const bitmap = await loadImage(file);
       const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
@@ -3665,7 +3703,7 @@ window.FIREBASE_VAPID_KEY =
       canvas.height = h;
       canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
       return { base64: dataUrl.split(",")[1], mimeType: "image/jpeg" };
     } catch {
       // フォールバック：縮小せずにそのまま送る
@@ -4094,6 +4132,43 @@ window.FIREBASE_VAPID_KEY =
   /* ==========================================================
    * 完了画面
    * ========================================================== */
+  /* ---------- 証拠写真の保存（管理者が確認できるように） ---------- */
+  function savePhotosEnabled() {
+    return storage.get(STORAGE_KEYS.savePhotos, "1") !== "0";
+  }
+
+  // テストを解き終えたら、小さく縮めた証拠写真を photos に保存する（60日たつと GitHub Actions が消す）
+  async function saveEvidencePhotos(meta) {
+    const thumbs = state.photoThumbs;
+    state.photoThumbs = null;
+    if (!thumbs?.length || !cloud.user || !savePhotosEnabled()) return;
+    const images = thumbs
+      .filter((t) => (t.base64.length * 3) / 4 <= SAVED_PHOTO_MAX_BYTES)
+      .map((t) => `data:${t.mimeType};base64,${t.base64}`);
+    if (!images.length) return;
+    try {
+      const { addDoc, collection } = cloud.fsMod;
+      await addDoc(collection(cloud.db, "photos"), {
+        uid: cloud.user.uid,
+        ts: Date.now(),
+        date: dateKey(),
+        ...meta,
+        images,
+      });
+    } catch (err) {
+      // 保存できなくても、利用者の記録には影響させない
+      console.error(err);
+    }
+  }
+
+  function renderPhotoSaveNote() {
+    const show = canUseFirebaseAI() && !!cloud.user && savePhotosEnabled();
+    el.photoSaveNote.classList.toggle("hidden", !show);
+    el.photoSaveSpacer.classList.toggle("hidden", show);
+    el.savePhotosRow.classList.toggle("hidden", !cloud.user);
+    el.savePhotosToggle.checked = savePhotosEnabled();
+  }
+
   /* ---------- 写真なしで記録 → あとで写真を報告 ---------- */
   // 写真なしでも、ちょいステップと勉強の記録だけで今日は達成にする（あとで写真を報告できる）
   function recordWithoutPhoto() {
@@ -4164,6 +4239,13 @@ window.FIREBASE_VAPID_KEY =
     const total = state.quiz.questions.length;
     const c = state.correctCount;
     track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0 });
+    saveEvidencePhotos({
+      logTs: state.reportLogTs || null,
+      book: state.studyBook || "",
+      topic: state.quiz.topic || "",
+      correct: c,
+      total,
+    });
     if (state.reportLogTs) return finishReport();
     completeSession({ log: { topic: state.quiz.topic || "", correct: c, total } });
     showScoreMessage(c, total);

@@ -13,10 +13,12 @@ HTML / CSS / JavaScript のみで動作し、ビルドは不要です。
 | `style.css` | 共通部品・アニメーションの追加スタイル |
 | `app.js` | 画面遷移、ショートステップ、写真処理、Gemini API 呼び出し、クイズ採点、アカウント同期 |
 | `firebase-config.js` | アカウント機能用の Firebase 設定（未設定ならログイン機能なし） |
+| `admin.html`, `admin.js` | 管理者ページ（証拠写真・アンケートの答え・記録を匿名IDで一覧） |
 | `build.py` | 1ファイル版 `habit-app.html` を作るスクリプト |
 | `sw.js` | Service Worker。アプリを閉じていても通知を受け取って表示する |
 | `manifest.webmanifest`, `icons/` | ホーム画面に追加したときのアプリ名・アイコン |
 | `scripts/send-reminders.mjs` | リマインド通知を送るスクリプト（GitHub Actions から実行） |
+| `scripts/cleanup-photos.mjs` | 60日たった証拠写真を消すスクリプト（GitHub Actions から実行） |
 | `scripts/sync-calendars.mjs` | カレンダーの予定（埋まっている時間帯）を読み込むスクリプト（GitHub Actions から実行） |
 | `.github/workflows/notify.yml` | 15分ごとにカレンダーの読み込みと通知を実行する |
 
@@ -75,6 +77,34 @@ APIキーがなくても「APIキーなしでデモ問題を試す」で画面�
   `photo_skip` / `photo_report_start` / `demo_quiz` / `plan_add` / `notify_enable` / `notify_disable` / `calendar_link` / `calendar_unlink`
 - 設定タブの「🔒 プライバシー」で送信をオフにできる（端末ごと）。「プライバシーと利用状況について」で、保存するもの・
   管理者が見られること・外部に送るものを説明している
+
+## 証拠写真の保存と管理者ページ
+
+- テストを解き終えたとき、証拠写真を長辺480px・JPEG画質0.6に縮めて（1枚数十KB）、
+  匿名ID（uid）・日時・教材名・テーマ・正解数と一緒に Firestore の `photos` に保存する（Firebase Storage は使わない＝無料プランのまま）
+- 利用者は設定タブの「🔒 プライバシー」で保存をオフにできる（`users/{uid}.savePhotos`）。証拠写真の画面とプライバシーのページで案内している
+- 保存から60日たった写真は GitHub Actions（`scripts/cleanup-photos.mjs`）が自動で消す
+- **管理者ページ**：`https://askedkazu.github.io/habit-app/admin.html`。証拠写真と、利用者ごとのアンケートの答え・教材・記録を
+  「利用者 #uidの先頭6文字」で一覧できる。読めるのは Firestore のルールで管理者にしたアカウントだけ
+- Firestore のルール（`管理者のUID` は、管理者ページにログインすると表示されるUIDに置き換える）：
+  ```
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      function isAdmin() {
+        return request.auth != null && request.auth.uid == "管理者のUID";
+      }
+      match /users/{uid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAdmin();
+      }
+      match /photos/{id} {
+        allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+        allow read, delete: if isAdmin();
+      }
+    }
+  }
+  ```
 
 ## 開発の流れ（機能を追加するとき）
 

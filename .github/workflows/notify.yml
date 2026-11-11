@@ -1,5 +1,6 @@
-# リマインド通知を送る・カレンダーの予定を読み込む（15分ごと）
-# 送る条件は scripts/send-reminders.mjs、カレンダーは scripts/sync-calendars.mjs を参照。
+# リマインド通知を送る・カレンダーの予定を読み込む・古い証拠写真を消す（15分ごと）
+# 送る条件は scripts/send-reminders.mjs、カレンダーは scripts/sync-calendars.mjs、
+# 写真の削除は scripts/cleanup-photos.mjs を参照。
 # リポジトリの Settings → Secrets and variables → Actions に
 # FIREBASE_SERVICE_ACCOUNT（Firebase のサービスアカウント鍵のJSON）を登録すると動く。
 name: リマインド通知
@@ -41,6 +42,12 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node sync-calendars.mjs
+
+      - name: 60日たった証拠写真を消す
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node cleanup-photos.mjs
 
       - name: 通知を送る
         working-directory: scripts
