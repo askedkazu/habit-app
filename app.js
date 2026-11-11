@@ -165,6 +165,15 @@
     plusTimeBtn: $("plusTimeBtn"),
     timeChips: $("timeChips"),
     timerBtn: $("timerBtn"),
+    timerPanel: $("timerPanel"),
+    timerClock: $("timerClock"),
+    timerHint: $("timerHint"),
+    timerIconPlay: $("timerIconPlay"),
+    timerIconStop: $("timerIconStop"),
+    skipPhotoBtn: $("skipPhotoBtn"),
+    pendingCard: $("pendingCard"),
+    pendingText: $("pendingText"),
+    pendingBtn: $("pendingBtn"),
     studyNextBtn: $("studyNextBtn"),
     homeStudyTime: $("homeStudyTime"),
     homeGoal: $("homeGoal"),
@@ -296,6 +305,7 @@
     correctCount: 0,    // 正解数
     studyBook: "",      // 選んだ教材（未選択なら空）
     studyMinutes: 0,    // 勉強時間（分）
+    reportLogTs: null,  // 「あとで報告」の記録に写真を報告しているとき、その記録の ts
   };
 
   /* ----------------------------------------------------------
@@ -1670,8 +1680,19 @@
     return storage.getJSON(STORAGE_KEYS.logs, []);
   }
 
+  // 時刻順に並べ、同じ記録（ts が同じ）が重なっていたら1つにする。
+  // 写真をあとで報告した記録は、報告待ちのものより報告済みのものを残す
   function sortLogs(logs) {
-    return [...logs].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const byTs = new Map();
+    logs.forEach((log) => {
+      const prev = byTs.get(log.ts);
+      if (!prev || (prev.pending && !log.pending)) byTs.set(log.ts, log);
+    });
+    return [...byTs.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  }
+
+  function pendingLogs() {
+    return getLogs().filter((l) => l.pending);
   }
 
   function addLog(log) {
@@ -1795,6 +1816,19 @@
     }
 
     renderLogList(el.recentLogs, getLogs().reverse().slice(0, 3));
+
+    // 写真をあとで報告する記録（新しいものから）
+    const pending = pendingLogs();
+    el.pendingCard.classList.toggle("hidden", pending.length === 0);
+    if (pending.length) {
+      const latest = pending[pending.length - 1];
+      const d = parseDateKey(latest.date);
+      el.pendingText.textContent =
+        pending.length === 1
+          ? `${d.getMonth() + 1}/${d.getDate()}の記録の写真がまだです`
+          : `写真の報告がまだの記録が${pending.length}件あります`;
+      el.pendingBtn.onclick = () => startReport(latest.ts);
+    }
     renderPlan();
   }
 
@@ -1838,7 +1872,13 @@
       body.append(topic, sub);
 
       li.append(date, body);
-      if (log.total) {
+      if (log.pending) {
+        const report = document.createElement("button");
+        report.className = "log-score pending";
+        report.textContent = "📸 写真を報告";
+        report.addEventListener("click", () => startReport(log.ts));
+        li.append(report);
+      } else if (log.total) {
         const score = document.createElement("span");
         score.className = `log-score${log.correct === log.total ? " perfect" : ""}`;
         score.textContent = `${log.correct}/${log.total}問`;
@@ -2007,6 +2047,7 @@
     renderPhotos();
 
     el.generateBtn.addEventListener("click", onGenerateQuiz);
+    el.skipPhotoBtn.addEventListener("click", recordWithoutPhoto);
 
     el.demoBtn.addEventListener("click", () => {
       hideError();
@@ -2631,7 +2672,83 @@
   /* ==========================================================
    * 完了画面
    * ========================================================== */
+  /* ---------- 写真なしで記録 → あとで写真を報告 ---------- */
+  // 写真なしでも、ちょいステップと勉強の記録だけで今日は達成にする（あとで写真を報告できる）
+  function recordWithoutPhoto() {
+    completeSession({
+      log: { pending: true },
+      score: "📸 写真はあとで報告できます",
+      message: "ホームや記録タブの「📸 写真を報告」から、写真を送って確認テストに挑戦できます",
+    });
+  }
+
+  function findLog(ts) {
+    return getLogs().find((l) => l.ts === ts) || null;
+  }
+
+  // 報告待ちの記録に写真を送る：その記録の教材を選んだ状態で、証拠写真の画面から始める
+  function startReport(ts) {
+    const log = findLog(ts);
+    if (!log) return;
+    resetAll();
+    state.reportLogTs = ts;
+    state.studyBook = log.book || "";
+    showTab("flow");
+    showScreen(3);
+    el.skipPhotoBtn.classList.add("hidden");
+    el.headerTitle.textContent = `写真の報告（${Number(log.date.slice(5, 7))}/${Number(log.date.slice(8))}の記録）`;
+  }
+
+  // 報告待ちの記録を、テストの結果で更新する
+  async function finishReport() {
+    const old = findLog(state.reportLogTs);
+    const total = state.quiz.questions.length;
+    const c = state.correctCount;
+    if (old) {
+      const updated = { ...old, topic: state.quiz.topic || "", correct: c, total };
+      delete updated.pending;
+      // アカウントの記録は「追加」で同期しているので、古い（報告待ちの）記録は先に消しておく
+      if (cloud.user) {
+        await cloud.fsMod
+          .setDoc(userDocRef(), { logs: cloud.fsMod.arrayRemove(old) }, { merge: true })
+          .catch((err) => console.error(err));
+      }
+      storage.setJSON(STORAGE_KEYS.logs, sortLogs(getLogs().map((l) => (l.ts === old.ts ? updated : l))));
+    }
+    state.reportLogTs = null;
+    renderStats();
+    el.doneStreak.classList.remove("bump");
+    el.doneStreak.textContent = calcStreak(getHistory());
+    el.doneStreakNote.textContent = "写真の報告ありがとう！記録を更新しました";
+    showNewBadges([]);
+    showScoreMessage(c, total);
+    showScreen("done");
+    launchConfetti();
+  }
+
+  function showScoreMessage(c, total) {
+    el.doneScore.textContent = `${total}問中 ${c}問 正解`;
+    el.doneMessage.textContent =
+      c === total
+        ? "パーフェクト！内容がしっかり頭に入っています 💯"
+        : c > 0
+        ? "よくできました！間違えた所をもう一度見直すとさらに◎"
+        : "取り組んだこと自体が大きな一歩。明日も机に座るだけでOK！";
+  }
+
   function finishQuiz() {
+    if (state.reportLogTs) return finishReport();
+    const total = state.quiz.questions.length;
+    const c = state.correctCount;
+    completeSession({ log: { topic: state.quiz.topic || "", correct: c, total } });
+    showScoreMessage(c, total);
+  }
+
+  /**
+   * 今日の記録を残して、達成画面を出す（テストを解いたとき・写真なしで記録したとき共通）
+   * log: 記録に足す項目。score / message: 達成画面の下の文（テストのときは呼び出し側で入れる）
+   */
+  function completeSession({ log, score, message }) {
     // 達成前の状態（連続日数の演出と、新しいバッジの判定に使う）
     const before = getHistory();
     const doneBefore = before.includes(dateKey());
@@ -2639,18 +2756,15 @@
     const bestBefore = calcBestStreak(before);
     const badgesBefore = earnedBadgeIds(before);
 
-    // 「超低ハードル」コンセプトのため、全問解き終えたら正答数に関わらず達成扱い
-    const total = state.quiz.questions.length;
-    const c = state.correctCount;
+    // 「超低ハードル」コンセプトのため、全問解き終えたら正答数に関わらず達成扱い（写真なしでも達成）
     addLog({
       date: dateKey(),
       ts: Date.now(),
-      topic: state.quiz.topic || "",
-      correct: c,
-      total,
+      topic: "",
       steps: state.checkedCount || 0,
       book: state.studyBook || "",
       minutes: state.studyMinutes || 0,
+      ...log,
     });
     recordAchievement();
     renderStats();
@@ -2659,14 +2773,8 @@
     const streakAfter = calcStreak(after);
     showDoneStreak({ doneBefore, streakBefore, streakAfter, bestBefore });
     showNewBadges(earnedBadgeIds(after).filter((id) => !badgesBefore.includes(id)));
-
-    el.doneScore.textContent = `${total}問中 ${c}問 正解`;
-    el.doneMessage.textContent =
-      c === total
-        ? "パーフェクト！内容がしっかり頭に入っています 💯"
-        : c > 0
-        ? "よくできました！間違えた所をもう一度見直すとさらに◎"
-        : "取り組んだこと自体が大きな一歩。明日も机に座るだけでOK！";
+    if (score !== undefined) el.doneScore.textContent = score;
+    if (message !== undefined) el.doneMessage.textContent = message;
 
     showScreen("done");
     launchConfetti();
@@ -2725,6 +2833,8 @@
   function resetAll() {
     clearPhotos();
     state.quiz = null;
+    state.reportLogTs = null;
+    el.skipPhotoBtn.classList.remove("hidden");
     hideError();
     renderShortSteps();
     // 教材は前回のものを選んだままにし、時間は0から（タイマー中はそのまま）
@@ -2921,17 +3031,24 @@
     return Number(storage.get(TIMER_KEY, "")) || 0;
   }
 
+  // 例: 65秒 → "01:05"、1時間5分 → "1:05:00"
+  function formatElapsed(sec) {
+    const h = Math.floor(sec / 3600);
+    const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+
   function renderTimer() {
     const started = timerStartedAt();
-    el.timerBtn.classList.toggle("timer-running", !!started);
-    if (!started) {
-      el.timerBtn.textContent = "⏱ タイマーで計る";
-      return;
-    }
-    const sec = Math.floor((Date.now() - started) / 1000);
-    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
-    const ss = String(sec % 60).padStart(2, "0");
-    el.timerBtn.textContent = `⏹ 止めて記録する（${mm}:${ss}）`;
+    el.timerPanel.classList.toggle("running", !!started);
+    el.timerIconPlay.classList.toggle("hidden", !!started);
+    el.timerIconStop.classList.toggle("hidden", !started);
+    el.timerBtn.setAttribute("aria-label", started ? "タイマーを止めて記録する" : "タイマーをスタート");
+    el.timerClock.textContent = formatElapsed(started ? Math.floor((Date.now() - started) / 1000) : 0);
+    el.timerHint.textContent = started
+      ? "計測中…止めると「記録する時間」に足されます"
+      : "タップでスタート。アプリを閉じても計り続けます";
   }
 
   // タイマーは開始時刻を保存するので、アプリを閉じても計り続けられる

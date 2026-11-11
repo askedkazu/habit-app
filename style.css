@@ -196,6 +196,7 @@ body {
   white-space: nowrap;
 }
 .log-score.perfect { background: #fff4e6; color: #c2570c; }
+.log-score.pending { background: #fef3c7; color: #b45309; }
 .empty-note { text-align: center; font-size: 0.85rem; color: #94a3b8; padding: 1.5rem 0; }
 
 /* カレンダー */
@@ -328,7 +329,41 @@ body {
   font-size: 0.8rem;
   font-weight: 800;
 }
-.timer-running { background: #fff4e6 !important; color: #c2570c !important; font-weight: 800; }
+/* 勉強時間のタイマー */
+.timer-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.1rem 1rem 1rem;
+  border-radius: 1rem;
+  background: var(--primary-soft);
+  transition: background 0.2s;
+}
+.timer-clock {
+  font-size: 3.4rem;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+.timer-btn {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 8px 18px rgba(26, 156, 240, 0.35);
+  transition: transform 0.1s, background 0.2s;
+}
+.timer-btn:active { transform: scale(0.95); }
+.timer-hint { font-size: 0.75rem; font-weight: 700; color: var(--text-sub); text-align: center; }
+.timer-panel.running { background: #fff4e6; }
+.timer-panel.running .timer-clock { color: #c2570c; }
+.timer-panel.running .timer-btn { background: var(--accent); box-shadow: 0 8px 18px rgba(255, 138, 31, 0.35); }
 
 /* アンケートで、答えに応じて出てくる質問 */
 .reveal { animation: fadeIn 0.25s ease-out; }

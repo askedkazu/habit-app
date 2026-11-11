@@ -68,6 +68,16 @@
         今日のちょいステップを始める
       </button>
 
+      <!-- 写真をあとで報告する記録があるとき -->
+      <section id="pendingCard" class="hidden card mt-4 flex items-center gap-3">
+        <div class="text-2xl">📸</div>
+        <div class="flex-1 min-w-0">
+          <p id="pendingText" class="text-sm font-bold text-slate-800"></p>
+          <p class="text-xs text-slate-500">写真を送ると、確認テストに挑戦できます</p>
+        </div>
+        <button id="pendingBtn" class="btn-primary text-sm whitespace-nowrap">報告する</button>
+      </section>
+
       <!-- 悩みに合わせた今日のヒント -->
       <section id="tipCard" class="card mt-4 flex items-start gap-3">
         <div class="text-2xl leading-none">💡</div>
@@ -398,9 +408,23 @@
         </form>
 
         <p class="field-label mt-5">⏱ 勉強時間</p>
-        <div class="flex items-center justify-center gap-4">
+        <!-- タイマー（開始時刻を保存するので、アプリを閉じても計り続ける） -->
+        <div id="timerPanel" class="timer-panel">
+          <p id="timerClock" class="timer-clock">00:00</p>
+          <button id="timerBtn" class="timer-btn" type="button" aria-label="タイマーをスタート">
+            <svg id="timerIconPlay" class="w-9 h-9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+            <svg id="timerIconStop" class="hidden w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+          <p id="timerHint" class="timer-hint">タップでスタート。アプリを閉じても計り続けます</p>
+        </div>
+
+        <!-- 記録する時間（タイマーを止めると足される。手で直してもOK） -->
+        <div class="flex items-center justify-center gap-4 mt-4">
           <button id="minusTimeBtn" class="round-btn" type="button" aria-label="5分減らす">−</button>
-          <p class="text-center"><span id="studyMinutes" class="text-4xl font-extrabold tabular-nums">0</span><span class="font-bold ml-1">分</span></p>
+          <p class="text-center leading-tight">
+            <span class="block text-xs font-bold text-slate-500">記録する時間</span>
+            <span id="studyMinutes" class="text-3xl font-extrabold tabular-nums">0</span><span class="font-bold ml-1">分</span>
+          </p>
           <button id="plusTimeBtn" class="round-btn" type="button" aria-label="5分増やす">＋</button>
         </div>
         <div id="timeChips" class="grid grid-cols-5 gap-2 mt-3">
@@ -410,10 +434,11 @@
           <button type="button" class="time-chip" data-min="30">30分</button>
           <button type="button" class="time-chip" data-min="60">60分</button>
         </div>
-        <button id="timerBtn" class="btn-ghost w-full mt-3 text-sm" type="button">⏱ タイマーで計る</button>
 
-        <button id="studyNextBtn" class="btn-primary w-full mt-5 py-3 text-base">次へ：証拠写真</button>
-        <button class="back-btn text-sm text-slate-500 mt-4" data-back="1">← ステップに戻る</button>
+        <div class="flex items-center justify-between gap-3 mt-6">
+          <button class="back-btn text-sm text-slate-500" data-back="1">← 戻る</button>
+          <button id="studyNextBtn" class="btn-primary text-sm px-5">次へ →</button>
+        </div>
       </section>
 
       <!-- STEP 3: 証拠写真アップロード -->
@@ -448,7 +473,10 @@
         <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
           写真を送信して問題生成
         </button>
-        <button id="demoBtn" class="btn-ghost w-full mt-2 text-sm">
+        <button id="skipPhotoBtn" class="btn-ghost w-full mt-2 text-sm">
+          写真なしで記録する（あとで報告）
+        </button>
+        <button id="demoBtn" class="w-full mt-3 text-xs text-slate-400 underline">
           デモ問題で試す（AIを使わない）
         </button>
 
