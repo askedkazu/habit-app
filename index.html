@@ -342,6 +342,18 @@
         </p>
       </section>
 
+      <!-- プライバシー -->
+      <section class="card">
+        <p class="text-sm font-bold">🔒 プライバシー</p>
+        <label class="flex items-center justify-between gap-3 text-sm mt-2">
+          <span class="text-slate-700">利用状況を送って、アプリの改善に協力する
+            <span class="block text-xs text-slate-500">「何人が・何回」使ったかの集計だけ。名前や記録の中身は送りません</span>
+          </span>
+          <input id="analyticsToggle" type="checkbox" class="w-5 h-5 accent-sky-500 shrink-0" checked />
+        </label>
+        <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
+      </section>
+
       <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
     </main>
 
@@ -358,7 +370,10 @@
         <button id="obBackBtn" class="btn-ghost px-5">戻る</button>
         <button id="obNextBtn" class="btn-primary flex-1 py-3 text-base">次へ</button>
       </div>
-      <p class="text-center text-xs text-slate-400 mt-4">答えはあなたのアカウントにだけ保存され、他の人には見えません</p>
+      <p class="text-center text-xs text-slate-400 mt-4">
+        答えはあなたのアカウントに保存されます（アプリの管理者は確認できます）。
+        <button type="button" class="underline privacy-link">プライバシーについて</button>
+      </p>
     </main>
 
     <!-- =====================================================
@@ -577,6 +592,59 @@
       <div id="planBookList" class="flex flex-wrap gap-2"></div>
       <p id="planConflict" class="hidden text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mt-3"></p>
       <button id="planSaveBtn" class="btn-primary w-full py-3 mt-4">予定に入れる</button>
+    </section>
+  </div>
+
+  <!-- プライバシーと利用状況について -->
+  <div id="privacyModal" class="hidden modal-backdrop">
+    <section class="modal-sheet">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-lg">プライバシーと利用状況について</h2>
+        <button id="privacyCloseBtn" class="icon-btn" aria-label="閉じる">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="privacy-body text-sm text-slate-700 space-y-4">
+        <section>
+          <h3>保存するもの</h3>
+          <ul>
+            <li>ログインに使うメールアドレス・名前（Googleアカウントの表示名、またはニックネーム）</li>
+            <li>達成した日、記録（教材・勉強時間・テストのテーマと正解数）、勉強の予定</li>
+            <li>アンケートの答え（立場・学年や年代・目的・目標・試験日・目標時間・時間帯・悩み）、ちょいステップ、教材の一覧</li>
+            <li>通知の設定と、通知を届けるための端末ごとの宛先</li>
+            <li>カレンダー連携をしたときは、予定の入っている時間帯（予定の名前や内容は保存しません）と、URLで連携した場合はそのURL</li>
+          </ul>
+          <p>これらは Google の Firebase（クラウド）に保存され、スマホとPCで共有されます。証拠写真は保存しません。</p>
+        </section>
+        <section>
+          <h3>誰が見られるか</h3>
+          <ul>
+            <li>あなたの記録は、あなたのアカウントでしか開けません。ほかの利用者からは見えません</li>
+            <li><b>アプリの管理者は、Firebase の管理画面で全員の保存内容を確認できます</b>。不具合の調査や改善のためだけに使います</li>
+          </ul>
+        </section>
+        <section>
+          <h3>利用状況の集計（アナリティクス）</h3>
+          <ul>
+            <li>Google アナリティクスで、「アプリを開いた」「問題を作った」「写真なしで記録した」などの操作の回数を集計します</li>
+            <li>送るのは操作の種類と回数・時間などの数字だけで、名前・メールアドレス・アンケートの答え・記録の中身・写真は送りません</li>
+            <li>設定タブの「利用状況を送って、アプリの改善に協力する」をオフにすると、送らなくなります</li>
+          </ul>
+        </section>
+        <section>
+          <h3>外部のサービスに送るもの</h3>
+          <ul>
+            <li><b>AI（Google Gemini）</b>：問題を作るときに、証拠写真と、教材名・立場や学年・目的・試験までの日数を送ります</li>
+            <li><b>Googleカレンダー</b>：連携したときだけ、予定の入っている時間帯を読み取ります（書き込みはしません）</li>
+            <li><b>reCAPTCHA</b>：アプリが不正に使われないよう、本物のアプリからの利用か確認します</li>
+          </ul>
+        </section>
+        <section>
+          <h3>データを消したいとき</h3>
+          <p>アンケートは設定タブの「答え直す」で変えられ、記録やステップ・教材・予定はそれぞれの画面から消せます。アカウントごと消したいときは、アプリの管理者に連絡してください。</p>
+        </section>
+      </div>
+      <button id="privacyOkBtn" class="btn-primary w-full mt-5 py-3">OK</button>
     </section>
   </div>
 

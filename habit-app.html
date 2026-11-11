@@ -425,6 +425,11 @@ body {
 .msg-error { background: #fff1f2; color: #be123c; }
 .msg-ok { background: #ecfdf3; color: #15803d; }
 
+/* プライバシーの説明 */
+.privacy-body h3 { font-weight: 800; color: #0f172a; margin-bottom: 0.3rem; }
+.privacy-body ul { list-style: disc; padding-left: 1.2rem; display: grid; gap: 0.25rem; }
+.privacy-body p { margin-top: 0.3rem; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
@@ -933,6 +938,18 @@ body {
         </p>
       </section>
 
+      <!-- プライバシー -->
+      <section class="card">
+        <p class="text-sm font-bold">🔒 プライバシー</p>
+        <label class="flex items-center justify-between gap-3 text-sm mt-2">
+          <span class="text-slate-700">利用状況を送って、アプリの改善に協力する
+            <span class="block text-xs text-slate-500">「何人が・何回」使ったかの集計だけ。名前や記録の中身は送りません</span>
+          </span>
+          <input id="analyticsToggle" type="checkbox" class="w-5 h-5 accent-sky-500 shrink-0" checked />
+        </label>
+        <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
+      </section>
+
       <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
     </main>
 
@@ -949,7 +966,10 @@ body {
         <button id="obBackBtn" class="btn-ghost px-5">戻る</button>
         <button id="obNextBtn" class="btn-primary flex-1 py-3 text-base">次へ</button>
       </div>
-      <p class="text-center text-xs text-slate-400 mt-4">答えはあなたのアカウントにだけ保存され、他の人には見えません</p>
+      <p class="text-center text-xs text-slate-400 mt-4">
+        答えはあなたのアカウントに保存されます（アプリの管理者は確認できます）。
+        <button type="button" class="underline privacy-link">プライバシーについて</button>
+      </p>
     </main>
 
     <!-- =====================================================
@@ -1171,6 +1191,59 @@ body {
     </section>
   </div>
 
+  <!-- プライバシーと利用状況について -->
+  <div id="privacyModal" class="hidden modal-backdrop">
+    <section class="modal-sheet">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-lg">プライバシーと利用状況について</h2>
+        <button id="privacyCloseBtn" class="icon-btn" aria-label="閉じる">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="privacy-body text-sm text-slate-700 space-y-4">
+        <section>
+          <h3>保存するもの</h3>
+          <ul>
+            <li>ログインに使うメールアドレス・名前（Googleアカウントの表示名、またはニックネーム）</li>
+            <li>達成した日、記録（教材・勉強時間・テストのテーマと正解数）、勉強の予定</li>
+            <li>アンケートの答え（立場・学年や年代・目的・目標・試験日・目標時間・時間帯・悩み）、ちょいステップ、教材の一覧</li>
+            <li>通知の設定と、通知を届けるための端末ごとの宛先</li>
+            <li>カレンダー連携をしたときは、予定の入っている時間帯（予定の名前や内容は保存しません）と、URLで連携した場合はそのURL</li>
+          </ul>
+          <p>これらは Google の Firebase（クラウド）に保存され、スマホとPCで共有されます。証拠写真は保存しません。</p>
+        </section>
+        <section>
+          <h3>誰が見られるか</h3>
+          <ul>
+            <li>あなたの記録は、あなたのアカウントでしか開けません。ほかの利用者からは見えません</li>
+            <li><b>アプリの管理者は、Firebase の管理画面で全員の保存内容を確認できます</b>。不具合の調査や改善のためだけに使います</li>
+          </ul>
+        </section>
+        <section>
+          <h3>利用状況の集計（アナリティクス）</h3>
+          <ul>
+            <li>Google アナリティクスで、「アプリを開いた」「問題を作った」「写真なしで記録した」などの操作の回数を集計します</li>
+            <li>送るのは操作の種類と回数・時間などの数字だけで、名前・メールアドレス・アンケートの答え・記録の中身・写真は送りません</li>
+            <li>設定タブの「利用状況を送って、アプリの改善に協力する」をオフにすると、送らなくなります</li>
+          </ul>
+        </section>
+        <section>
+          <h3>外部のサービスに送るもの</h3>
+          <ul>
+            <li><b>AI（Google Gemini）</b>：問題を作るときに、証拠写真と、教材名・立場や学年・目的・試験までの日数を送ります</li>
+            <li><b>Googleカレンダー</b>：連携したときだけ、予定の入っている時間帯を読み取ります（書き込みはしません）</li>
+            <li><b>reCAPTCHA</b>：アプリが不正に使われないよう、本物のアプリからの利用か確認します</li>
+          </ul>
+        </section>
+        <section>
+          <h3>データを消したいとき</h3>
+          <p>アンケートは設定タブの「答え直す」で変えられ、記録やステップ・教材・予定はそれぞれの画面から消せます。アカウントごと消したいときは、アプリの管理者に連絡してください。</p>
+        </section>
+      </div>
+      <button id="privacyOkBtn" class="btn-primary w-full mt-5 py-3">OK</button>
+    </section>
+  </div>
+
   <!-- ログイン・アカウント作成 -->
   <div id="authModal" class="hidden modal-backdrop">
     <section class="modal-sheet">
@@ -1281,6 +1354,8 @@ window.FIREBASE_VAPID_KEY =
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
   };
+  // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
+  const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
   const MAX_STUDY_MINUTES = 600;
@@ -1424,6 +1499,10 @@ window.FIREBASE_VAPID_KEY =
     timerIconPlay: $("timerIconPlay"),
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
+    analyticsToggle: $("analyticsToggle"),
+    privacyModal: $("privacyModal"),
+    privacyCloseBtn: $("privacyCloseBtn"),
+    privacyOkBtn: $("privacyOkBtn"),
     pendingCard: $("pendingCard"),
     pendingText: $("pendingText"),
     pendingBtn: $("pendingBtn"),
@@ -1679,6 +1758,55 @@ window.FIREBASE_VAPID_KEY =
   }
 
   /* ==========================================================
+   * 利用状況の集計（Firebase の Google アナリティクス）
+   * ----------------------------------------------------------
+   * 「何人が・何回」使ったかを Firebase コンソールの Analytics で見るため、操作の種類と回数・時間などの数字だけを送る。
+   * 名前・メールアドレス・アンケートの答え・記録の中身（教材名やテーマ）・写真は送らない。
+   * 設定タブでオフにでき、オフの端末からは何も送らない。
+   * ========================================================== */
+  const analytics = { mod: null, instance: null };
+
+  function analyticsOptedOut() {
+    return storage.get(ANALYTICS_OPTOUT_KEY, "") === "1";
+  }
+
+  async function initAnalytics(app) {
+    if (!window.FIREBASE_CONFIG?.measurementId) return;
+    const mod = await import(`${FIREBASE_SDK}/firebase-analytics.js`);
+    if (!(await mod.isSupported().catch(() => false))) return;
+    analytics.mod = mod;
+    analytics.instance = mod.getAnalytics(app);
+    mod.setAnalyticsCollectionEnabled(analytics.instance, !analyticsOptedOut());
+    track("app_open", { standalone: isStandalone() ? 1 : 0, logged_in: cloud.user ? 1 : 0 });
+  }
+
+  // 操作を1つ記録する（アナリティクスが使えない・オフのときは何もしない）
+  function track(name, params = {}) {
+    if (!analytics.instance || analyticsOptedOut()) return;
+    try {
+      analytics.mod.logEvent(analytics.instance, name, params);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function setAnalyticsEnabled(enabled) {
+    writeLocal(ANALYTICS_OPTOUT_KEY, enabled ? null : "1");
+    if (analytics.instance) analytics.mod.setAnalyticsCollectionEnabled(analytics.instance, enabled);
+  }
+
+  function initPrivacy() {
+    el.analyticsToggle.checked = !analyticsOptedOut();
+    el.analyticsToggle.addEventListener("change", () => setAnalyticsEnabled(el.analyticsToggle.checked));
+    const open = () => el.privacyModal.classList.remove("hidden");
+    const close = () => el.privacyModal.classList.add("hidden");
+    document.querySelectorAll(".privacy-link").forEach((b) => b.addEventListener("click", open));
+    el.privacyCloseBtn.addEventListener("click", close);
+    el.privacyOkBtn.addEventListener("click", close);
+    el.privacyModal.addEventListener("click", (e) => e.target === el.privacyModal && close());
+  }
+
+  /* ==========================================================
    * アカウント（Firebase Authentication + Cloud Firestore）
    * ----------------------------------------------------------
    * - firebase-config.js に設定があるときだけ有効になる
@@ -1735,6 +1863,8 @@ window.FIREBASE_VAPID_KEY =
         import(`${FIREBASE_SDK}/firebase-ai.js`),
       ]);
       const app = appMod.initializeApp(config);
+      // 利用状況の集計（失敗してもアプリの他の機能は使えるようにする）
+      initAnalytics(app).catch((err) => console.error(err));
       // App Check は AI などを使う前に有効化しておく必要がある
       await initAppCheck(app);
       cloud.authMod = authMod;
@@ -1788,6 +1918,7 @@ window.FIREBASE_VAPID_KEY =
     const { GoogleAuthProvider, signInWithPopup } = cloud.authMod;
     try {
       await signInWithPopup(cloud.auth, new GoogleAuthProvider());
+      track("login", { method: "google" });
     } catch (err) {
       console.error(err);
       // ポップアップを閉じただけの場合は何も表示しない
@@ -1862,6 +1993,7 @@ window.FIREBASE_VAPID_KEY =
     try {
       if (authMode === "signup") {
         const { user } = await createUserWithEmailAndPassword(cloud.auth, email, password);
+        track("sign_up", { method: "email" });
         const name = el.authName.value.trim();
         if (name) {
           await updateProfile(user, { displayName: name });
@@ -1871,6 +2003,7 @@ window.FIREBASE_VAPID_KEY =
         sendEmailVerification(user).catch(() => {});
       } else {
         await signInWithEmailAndPassword(cloud.auth, email, password);
+        track("login", { method: "email" });
       }
       // ログインできたら onAuthStateChanged でシートを閉じる
     } catch (err) {
@@ -2195,6 +2328,7 @@ window.FIREBASE_VAPID_KEY =
 
   // この端末で通知を受け取れるようにする
   async function enableNotify() {
+    track("notify_enable");
     // 許可ダイアログは、ボタンを押した直後に出す必要がある（iPhone の制約）
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
@@ -2226,6 +2360,7 @@ window.FIREBASE_VAPID_KEY =
 
   // この端末への通知をやめる（他の端末の通知はそのまま）
   async function disableNotify() {
+    track("notify_disable");
     const token = getLocalNotifyToken();
     if (token && cloud.user) {
       const { setDoc, arrayRemove } = cloud.fsMod;
@@ -2372,6 +2507,7 @@ window.FIREBASE_VAPID_KEY =
         { merge: true }
       );
       el.calendarUrlInput.value = "";
+      track("calendar_link", { method: "url", provider: calendarProvider });
     } catch (err) {
       console.error(err);
       el.calendarMsg.textContent = "保存できませんでした。もう一度お試しください";
@@ -2381,6 +2517,7 @@ window.FIREBASE_VAPID_KEY =
   }
 
   async function unlinkCalendar() {
+    track("calendar_unlink");
     const { setDoc, deleteField } = cloud.fsMod;
     // Google の許可も取り消しておく（もう一度連携するときは、また許可を聞く）
     if (googleToken.value) {
@@ -2501,6 +2638,7 @@ window.FIREBASE_VAPID_KEY =
         },
         { merge: true }
       );
+      if (interactive) track("calendar_link", { method: "google", calendars });
     } catch (err) {
       console.error(err);
       if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
@@ -2845,6 +2983,7 @@ window.FIREBASE_VAPID_KEY =
     if (!date || !time) return;
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     savePlans([...getPlans(), { id, date, time, minutes: planDraft.minutes, book: planDraft.book }]);
+    track("plan_add", { minutes: planDraft.minutes, days_ahead: Math.round((parseDateKey(date) - parseDateKey(dateKey())) / 86400000) });
     closePlanModal();
     renderStats();
   }
@@ -3279,6 +3418,7 @@ window.FIREBASE_VAPID_KEY =
 
     el.achieveBtn.addEventListener("click", () => {
       state.checkedCount = el.shortStepList.querySelectorAll("input:checked").length;
+      track("steps_done", { count: state.checkedCount });
       showScreen(2);
     });
   }
@@ -3303,6 +3443,7 @@ window.FIREBASE_VAPID_KEY =
     el.skipPhotoBtn.addEventListener("click", recordWithoutPhoto);
 
     el.demoBtn.addEventListener("click", () => {
+      track("demo_quiz");
       hideError();
       el.quizTiming.textContent = "";
       startQuiz(structuredClone(DEMO_QUIZ));
@@ -3385,6 +3526,18 @@ window.FIREBASE_VAPID_KEY =
     el.generateBtn.textContent = count > 1 ? `写真${count}枚を送信して問題生成` : "写真を送信して問題生成";
   }
 
+  // 失敗の理由を、集計しやすい短い種類に分ける（エラー文そのものは送らない）
+  function generationErrorReason(err) {
+    const msg = String(err?.message || "");
+    if (/App Check/i.test(msg)) return "app_check";
+    if (/ブロック|blocked|SAFETY/i.test(msg)) return "blocked";
+    if (/混み合|quota|429|RESOURCE_EXHAUSTED/i.test(msg)) return "quota";
+    if (/時間切れ|timeout|応答しませんでした/i.test(msg)) return "timeout";
+    if (/JSON|有効な問題/.test(msg)) return "bad_response";
+    if (/通信|network|fetch/i.test(msg)) return "network";
+    return "other";
+  }
+
   // 「写真を送信して問題生成」ボタンの処理
   async function onGenerateQuiz() {
     // Firebase 経由（利用者はログインだけでOK）か、自分のAPIキーで直接呼ぶかを決める
@@ -3410,6 +3563,8 @@ window.FIREBASE_VAPID_KEY =
 
     setLoading(true);
     hideError();
+    const startedAt = Date.now();
+    track("quiz_generate_start", { photos: state.photos.length, report: state.reportLogTs ? 1 : 0 });
     try {
       setPhase("写真の準備");
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
@@ -3424,10 +3579,20 @@ window.FIREBASE_VAPID_KEY =
       }
       setLoading(false);
       el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${images.length}枚・${timing.imageKB}KB）`;
+      track("quiz_generate_success", {
+        photos: images.length,
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+        model: state.lastModel || getModel(),
+        fallback: state.lastModelFallback ? 1 : 0,
+      });
       startQuiz(quiz);
     } catch (err) {
       console.error(err);
       setLoading(false);
+      track("quiz_generate_error", {
+        reason: generationErrorReason(err),
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+      });
       showError(`${err.message || "問題の生成に失敗しました。"}\n\n（${timingSummary()}）`);
     } finally {
       setLoading(false);
@@ -3756,7 +3921,11 @@ window.FIREBASE_VAPID_KEY =
         );
         const text = result.response.text();
         if (!text) throw new Error("AIから回答が得られませんでした");
-        return parseQuizJson(text);
+        const quiz = parseQuizJson(text);
+        // 集計用：どのモデルで作れたか
+        state.lastModel = attempt.model;
+        state.lastModelFallback = attempt !== attempts[0];
+        return quiz;
       } catch (err) {
         console.error(err);
         const msg = String(err?.message || err);
@@ -3928,6 +4097,7 @@ window.FIREBASE_VAPID_KEY =
   /* ---------- 写真なしで記録 → あとで写真を報告 ---------- */
   // 写真なしでも、ちょいステップと勉強の記録だけで今日は達成にする（あとで写真を報告できる）
   function recordWithoutPhoto() {
+    track("photo_skip", { minutes: state.studyMinutes || 0 });
     completeSession({
       log: { pending: true },
       score: "📸 写真はあとで報告できます",
@@ -3945,6 +4115,7 @@ window.FIREBASE_VAPID_KEY =
     if (!log) return;
     resetAll();
     state.reportLogTs = ts;
+    track("photo_report_start", { days_later: Math.round((parseDateKey(dateKey()) - parseDateKey(log.date)) / 86400000) });
     state.studyBook = log.book || "";
     showTab("flow");
     showScreen(3);
@@ -3990,9 +4161,10 @@ window.FIREBASE_VAPID_KEY =
   }
 
   function finishQuiz() {
-    if (state.reportLogTs) return finishReport();
     const total = state.quiz.questions.length;
     const c = state.correctCount;
+    track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0 });
+    if (state.reportLogTs) return finishReport();
     completeSession({ log: { topic: state.quiz.topic || "", correct: c, total } });
     showScoreMessage(c, total);
   }
@@ -4340,6 +4512,11 @@ window.FIREBASE_VAPID_KEY =
     );
     el.timerBtn.addEventListener("click", toggleTimer);
     el.studyNextBtn.addEventListener("click", () => {
+      track("study_recorded", {
+        minutes: state.studyMinutes + (timerStartedAt() ? Math.max(1, Math.round((Date.now() - timerStartedAt()) / 60000)) : 0),
+        has_book: state.studyBook ? 1 : 0,
+        timer: timerStartedAt() ? 1 : 0,
+      });
       if (timerStartedAt()) toggleTimer(); // タイマー中なら止めて時間を記録する
       showScreen(3);
     });
@@ -4497,6 +4674,14 @@ window.FIREBASE_VAPID_KEY =
   const RETIRED_PROFILE_KEYS = ["currentMinutes", "places", "weakSubjects", "busy", "worryNote"];
 
   function finishOnboarding() {
+    track("survey_complete", {
+      editing: onboarding.editing ? 1 : 0,
+      skipped: onboarding.page < onboarding.pages.length - 1 ? 1 : 0,
+      // 答えた質問の数（ステップの一覧や、答えた日時などの記録用の項目は数えない）
+      answered: ONBOARDING_PAGES.flatMap((p) => p.fields)
+        .filter((f) => f.key !== "steps" && onboarding.draft[f.key] !== undefined && onboarding.draft[f.key] !== "")
+        .length,
+    });
     const { steps, ...profile } = onboarding.draft;
     RETIRED_PROFILE_KEYS.forEach((key) => delete profile[key]);
     if (steps?.length) saveSteps(steps); // 全部外した場合は、今までのステップのまま
@@ -4738,6 +4923,7 @@ window.FIREBASE_VAPID_KEY =
     el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
     document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
     el.startBtn.addEventListener("click", () => {
+      track("flow_start", { done_today: getHistory().includes(dateKey()) ? 1 : 0 });
       resetAll();
       showTab("flow");
     });
@@ -4760,6 +4946,7 @@ window.FIREBASE_VAPID_KEY =
     initStudy();
     initPlans();
     initOnboarding();
+    initPrivacy();
     initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");

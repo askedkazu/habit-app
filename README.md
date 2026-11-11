@@ -65,6 +65,17 @@ APIキーがなくても「APIキーなしでデモ問題を試す」で画面�
   結果でその記録（テーマ・正解数）を更新する
 - 記録はアカウントに「追加」で同期しているため、更新前の記録は `arrayRemove` で消し、読み込み時も同じ `ts` の記録は1つにまとめる
 
+## 利用状況の集計（アナリティクス）とプライバシー
+
+- Firebase の Google アナリティクス（`firebase-config.js` の `measurementId`）で、操作の回数を集計する。
+  Firebase コンソール →「Analytics」→「イベント」で見られる（反映まで最大24時間ほど。「DebugView」ならすぐ確認できる）
+- 送るのは操作の種類と数字だけ。名前・メールアドレス・アンケートの答え・記録の中身・写真は送らない
+- 主なイベント：`app_open` / `login` / `sign_up` / `survey_complete` / `flow_start` / `steps_done` / `study_recorded` /
+  `quiz_generate_start` / `quiz_generate_success`（model・seconds）/ `quiz_generate_error`（reason）/ `quiz_complete` /
+  `photo_skip` / `photo_report_start` / `demo_quiz` / `plan_add` / `notify_enable` / `notify_disable` / `calendar_link` / `calendar_unlink`
+- 設定タブの「🔒 プライバシー」で送信をオフにできる（端末ごと）。「プライバシーと利用状況について」で、保存するもの・
+  管理者が見られること・外部に送るものを説明している
+
 ## 開発の流れ（機能を追加するとき）
 
 1. 分割版（`index.html` / `style.css` / `app.js`）を編集する

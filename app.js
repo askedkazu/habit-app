@@ -28,6 +28,8 @@
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
   };
+  // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
+  const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
   const MAX_STUDY_MINUTES = 600;
@@ -171,6 +173,10 @@
     timerIconPlay: $("timerIconPlay"),
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
+    analyticsToggle: $("analyticsToggle"),
+    privacyModal: $("privacyModal"),
+    privacyCloseBtn: $("privacyCloseBtn"),
+    privacyOkBtn: $("privacyOkBtn"),
     pendingCard: $("pendingCard"),
     pendingText: $("pendingText"),
     pendingBtn: $("pendingBtn"),
@@ -426,6 +432,55 @@
   }
 
   /* ==========================================================
+   * 利用状況の集計（Firebase の Google アナリティクス）
+   * ----------------------------------------------------------
+   * 「何人が・何回」使ったかを Firebase コンソールの Analytics で見るため、操作の種類と回数・時間などの数字だけを送る。
+   * 名前・メールアドレス・アンケートの答え・記録の中身（教材名やテーマ）・写真は送らない。
+   * 設定タブでオフにでき、オフの端末からは何も送らない。
+   * ========================================================== */
+  const analytics = { mod: null, instance: null };
+
+  function analyticsOptedOut() {
+    return storage.get(ANALYTICS_OPTOUT_KEY, "") === "1";
+  }
+
+  async function initAnalytics(app) {
+    if (!window.FIREBASE_CONFIG?.measurementId) return;
+    const mod = await import(`${FIREBASE_SDK}/firebase-analytics.js`);
+    if (!(await mod.isSupported().catch(() => false))) return;
+    analytics.mod = mod;
+    analytics.instance = mod.getAnalytics(app);
+    mod.setAnalyticsCollectionEnabled(analytics.instance, !analyticsOptedOut());
+    track("app_open", { standalone: isStandalone() ? 1 : 0, logged_in: cloud.user ? 1 : 0 });
+  }
+
+  // 操作を1つ記録する（アナリティクスが使えない・オフのときは何もしない）
+  function track(name, params = {}) {
+    if (!analytics.instance || analyticsOptedOut()) return;
+    try {
+      analytics.mod.logEvent(analytics.instance, name, params);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function setAnalyticsEnabled(enabled) {
+    writeLocal(ANALYTICS_OPTOUT_KEY, enabled ? null : "1");
+    if (analytics.instance) analytics.mod.setAnalyticsCollectionEnabled(analytics.instance, enabled);
+  }
+
+  function initPrivacy() {
+    el.analyticsToggle.checked = !analyticsOptedOut();
+    el.analyticsToggle.addEventListener("change", () => setAnalyticsEnabled(el.analyticsToggle.checked));
+    const open = () => el.privacyModal.classList.remove("hidden");
+    const close = () => el.privacyModal.classList.add("hidden");
+    document.querySelectorAll(".privacy-link").forEach((b) => b.addEventListener("click", open));
+    el.privacyCloseBtn.addEventListener("click", close);
+    el.privacyOkBtn.addEventListener("click", close);
+    el.privacyModal.addEventListener("click", (e) => e.target === el.privacyModal && close());
+  }
+
+  /* ==========================================================
    * アカウント（Firebase Authentication + Cloud Firestore）
    * ----------------------------------------------------------
    * - firebase-config.js に設定があるときだけ有効になる
@@ -482,6 +537,8 @@
         import(`${FIREBASE_SDK}/firebase-ai.js`),
       ]);
       const app = appMod.initializeApp(config);
+      // 利用状況の集計（失敗してもアプリの他の機能は使えるようにする）
+      initAnalytics(app).catch((err) => console.error(err));
       // App Check は AI などを使う前に有効化しておく必要がある
       await initAppCheck(app);
       cloud.authMod = authMod;
@@ -535,6 +592,7 @@
     const { GoogleAuthProvider, signInWithPopup } = cloud.authMod;
     try {
       await signInWithPopup(cloud.auth, new GoogleAuthProvider());
+      track("login", { method: "google" });
     } catch (err) {
       console.error(err);
       // ポップアップを閉じただけの場合は何も表示しない
@@ -609,6 +667,7 @@
     try {
       if (authMode === "signup") {
         const { user } = await createUserWithEmailAndPassword(cloud.auth, email, password);
+        track("sign_up", { method: "email" });
         const name = el.authName.value.trim();
         if (name) {
           await updateProfile(user, { displayName: name });
@@ -618,6 +677,7 @@
         sendEmailVerification(user).catch(() => {});
       } else {
         await signInWithEmailAndPassword(cloud.auth, email, password);
+        track("login", { method: "email" });
       }
       // ログインできたら onAuthStateChanged でシートを閉じる
     } catch (err) {
@@ -942,6 +1002,7 @@
 
   // この端末で通知を受け取れるようにする
   async function enableNotify() {
+    track("notify_enable");
     // 許可ダイアログは、ボタンを押した直後に出す必要がある（iPhone の制約）
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
@@ -973,6 +1034,7 @@
 
   // この端末への通知をやめる（他の端末の通知はそのまま）
   async function disableNotify() {
+    track("notify_disable");
     const token = getLocalNotifyToken();
     if (token && cloud.user) {
       const { setDoc, arrayRemove } = cloud.fsMod;
@@ -1119,6 +1181,7 @@
         { merge: true }
       );
       el.calendarUrlInput.value = "";
+      track("calendar_link", { method: "url", provider: calendarProvider });
     } catch (err) {
       console.error(err);
       el.calendarMsg.textContent = "保存できませんでした。もう一度お試しください";
@@ -1128,6 +1191,7 @@
   }
 
   async function unlinkCalendar() {
+    track("calendar_unlink");
     const { setDoc, deleteField } = cloud.fsMod;
     // Google の許可も取り消しておく（もう一度連携するときは、また許可を聞く）
     if (googleToken.value) {
@@ -1248,6 +1312,7 @@
         },
         { merge: true }
       );
+      if (interactive) track("calendar_link", { method: "google", calendars });
     } catch (err) {
       console.error(err);
       if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
@@ -1592,6 +1657,7 @@
     if (!date || !time) return;
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     savePlans([...getPlans(), { id, date, time, minutes: planDraft.minutes, book: planDraft.book }]);
+    track("plan_add", { minutes: planDraft.minutes, days_ahead: Math.round((parseDateKey(date) - parseDateKey(dateKey())) / 86400000) });
     closePlanModal();
     renderStats();
   }
@@ -2026,6 +2092,7 @@
 
     el.achieveBtn.addEventListener("click", () => {
       state.checkedCount = el.shortStepList.querySelectorAll("input:checked").length;
+      track("steps_done", { count: state.checkedCount });
       showScreen(2);
     });
   }
@@ -2050,6 +2117,7 @@
     el.skipPhotoBtn.addEventListener("click", recordWithoutPhoto);
 
     el.demoBtn.addEventListener("click", () => {
+      track("demo_quiz");
       hideError();
       el.quizTiming.textContent = "";
       startQuiz(structuredClone(DEMO_QUIZ));
@@ -2132,6 +2200,18 @@
     el.generateBtn.textContent = count > 1 ? `写真${count}枚を送信して問題生成` : "写真を送信して問題生成";
   }
 
+  // 失敗の理由を、集計しやすい短い種類に分ける（エラー文そのものは送らない）
+  function generationErrorReason(err) {
+    const msg = String(err?.message || "");
+    if (/App Check/i.test(msg)) return "app_check";
+    if (/ブロック|blocked|SAFETY/i.test(msg)) return "blocked";
+    if (/混み合|quota|429|RESOURCE_EXHAUSTED/i.test(msg)) return "quota";
+    if (/時間切れ|timeout|応答しませんでした/i.test(msg)) return "timeout";
+    if (/JSON|有効な問題/.test(msg)) return "bad_response";
+    if (/通信|network|fetch/i.test(msg)) return "network";
+    return "other";
+  }
+
   // 「写真を送信して問題生成」ボタンの処理
   async function onGenerateQuiz() {
     // Firebase 経由（利用者はログインだけでOK）か、自分のAPIキーで直接呼ぶかを決める
@@ -2157,6 +2237,8 @@
 
     setLoading(true);
     hideError();
+    const startedAt = Date.now();
+    track("quiz_generate_start", { photos: state.photos.length, report: state.reportLogTs ? 1 : 0 });
     try {
       setPhase("写真の準備");
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
@@ -2171,10 +2253,20 @@
       }
       setLoading(false);
       el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${images.length}枚・${timing.imageKB}KB）`;
+      track("quiz_generate_success", {
+        photos: images.length,
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+        model: state.lastModel || getModel(),
+        fallback: state.lastModelFallback ? 1 : 0,
+      });
       startQuiz(quiz);
     } catch (err) {
       console.error(err);
       setLoading(false);
+      track("quiz_generate_error", {
+        reason: generationErrorReason(err),
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+      });
       showError(`${err.message || "問題の生成に失敗しました。"}\n\n（${timingSummary()}）`);
     } finally {
       setLoading(false);
@@ -2503,7 +2595,11 @@
         );
         const text = result.response.text();
         if (!text) throw new Error("AIから回答が得られませんでした");
-        return parseQuizJson(text);
+        const quiz = parseQuizJson(text);
+        // 集計用：どのモデルで作れたか
+        state.lastModel = attempt.model;
+        state.lastModelFallback = attempt !== attempts[0];
+        return quiz;
       } catch (err) {
         console.error(err);
         const msg = String(err?.message || err);
@@ -2675,6 +2771,7 @@
   /* ---------- 写真なしで記録 → あとで写真を報告 ---------- */
   // 写真なしでも、ちょいステップと勉強の記録だけで今日は達成にする（あとで写真を報告できる）
   function recordWithoutPhoto() {
+    track("photo_skip", { minutes: state.studyMinutes || 0 });
     completeSession({
       log: { pending: true },
       score: "📸 写真はあとで報告できます",
@@ -2692,6 +2789,7 @@
     if (!log) return;
     resetAll();
     state.reportLogTs = ts;
+    track("photo_report_start", { days_later: Math.round((parseDateKey(dateKey()) - parseDateKey(log.date)) / 86400000) });
     state.studyBook = log.book || "";
     showTab("flow");
     showScreen(3);
@@ -2737,9 +2835,10 @@
   }
 
   function finishQuiz() {
-    if (state.reportLogTs) return finishReport();
     const total = state.quiz.questions.length;
     const c = state.correctCount;
+    track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0 });
+    if (state.reportLogTs) return finishReport();
     completeSession({ log: { topic: state.quiz.topic || "", correct: c, total } });
     showScoreMessage(c, total);
   }
@@ -3087,6 +3186,11 @@
     );
     el.timerBtn.addEventListener("click", toggleTimer);
     el.studyNextBtn.addEventListener("click", () => {
+      track("study_recorded", {
+        minutes: state.studyMinutes + (timerStartedAt() ? Math.max(1, Math.round((Date.now() - timerStartedAt()) / 60000)) : 0),
+        has_book: state.studyBook ? 1 : 0,
+        timer: timerStartedAt() ? 1 : 0,
+      });
       if (timerStartedAt()) toggleTimer(); // タイマー中なら止めて時間を記録する
       showScreen(3);
     });
@@ -3244,6 +3348,14 @@
   const RETIRED_PROFILE_KEYS = ["currentMinutes", "places", "weakSubjects", "busy", "worryNote"];
 
   function finishOnboarding() {
+    track("survey_complete", {
+      editing: onboarding.editing ? 1 : 0,
+      skipped: onboarding.page < onboarding.pages.length - 1 ? 1 : 0,
+      // 答えた質問の数（ステップの一覧や、答えた日時などの記録用の項目は数えない）
+      answered: ONBOARDING_PAGES.flatMap((p) => p.fields)
+        .filter((f) => f.key !== "steps" && onboarding.draft[f.key] !== undefined && onboarding.draft[f.key] !== "")
+        .length,
+    });
     const { steps, ...profile } = onboarding.draft;
     RETIRED_PROFILE_KEYS.forEach((key) => delete profile[key]);
     if (steps?.length) saveSteps(steps); // 全部外した場合は、今までのステップのまま
@@ -3485,6 +3597,7 @@
     el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
     document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.goto)));
     el.startBtn.addEventListener("click", () => {
+      track("flow_start", { done_today: getHistory().includes(dateKey()) ? 1 : 0 });
       resetAll();
       showTab("flow");
     });
@@ -3507,6 +3620,7 @@
     initStudy();
     initPlans();
     initOnboarding();
+    initPrivacy();
     initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");
