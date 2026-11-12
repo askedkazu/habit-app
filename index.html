@@ -465,7 +465,7 @@
       <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
         <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
-        <p class="text-sm text-slate-500 mb-2">開いた教科書やノートを撮影すると、AIがその内容から3問のテストを作ります。<span id="photoMaxNote"></span></p>
+        <p class="text-sm text-slate-500 mb-2">開いた教科書やノートを撮影すると、AIがその内容から<span id="quizCountInline">3</span>問のテストを作ります。<span id="photoMaxNote"></span></p>
         <p id="photoSaveNote" class="hidden text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-4">
           📷 写真は小さく縮めて、アプリの管理者が確認できる形で保存されます（60日で自動削除）。設定タブの「プライバシー」でオフにできます
         </p>
@@ -495,7 +495,18 @@
         <input id="cameraInput" type="file" accept="image/*" capture="environment" class="file-input-hidden" />
         <input id="photoInput" type="file" accept="image/*" multiple class="file-input-hidden" />
 
-        <button id="generateBtn" class="btn-primary w-full mt-5 py-3 text-base" disabled>
+        <!-- 問題の数（1〜10問。前回の数を覚えておく） -->
+        <div class="mt-5">
+          <div class="flex items-center justify-between">
+            <label for="quizCountRange" class="text-sm font-bold text-slate-700">📝 問題の数</label>
+            <span class="text-sm font-bold text-slate-800"><span id="quizCountValue" class="text-2xl font-extrabold tabular-nums text-sky-600">3</span> 問</span>
+          </div>
+          <input id="quizCountRange" type="range" min="1" max="10" step="1" value="3" class="quiz-range w-full mt-1" />
+          <div class="flex justify-between text-xs text-slate-400 px-0.5"><span>1問</span><span>10問</span></div>
+          <p id="quizCountHint" class="hidden text-xs text-slate-500 mt-1">問題が多いと、作るのに少し時間がかかります</p>
+        </div>
+
+        <button id="generateBtn" class="btn-primary w-full mt-4 py-3 text-base" disabled>
           写真を送信して問題生成
         </button>
         <button id="skipPhotoBtn" class="btn-ghost w-full mt-2 text-sm">

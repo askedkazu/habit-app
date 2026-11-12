@@ -415,6 +415,9 @@ body {
 .privacy-body ul { list-style: disc; padding-left: 1.2rem; display: grid; gap: 0.25rem; }
 .privacy-body p { margin-top: 0.3rem; }
 
+/* 問題の数のスライダー */
+.quiz-range { accent-color: var(--primary); height: 2rem; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;

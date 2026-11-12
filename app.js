@@ -4,7 +4,7 @@
    画面の流れ:
      STEP1 ショートステップ（チェック → 達成ボタン）
        ↓
-     STEP2 証拠写真アップロード → Gemini API で3問生成
+     STEP2 証拠写真アップロード → Gemini API で問題を生成（1〜10問。既定は3問）
        ↓
      STEP3 確認テスト（1問ずつ回答・採点）
        ↓
@@ -28,6 +28,7 @@
     profile: "habitApp.profile", // 最初のアンケートの答え（立場・目的・悩みなど）
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
     savePhotos: "habitApp.savePhotos", // "0" なら証拠写真を保存しない（未設定・"1" なら保存する）
+    quizCount: "habitApp.quizCount", // 確認テストの問題の数（1〜10）
   };
   // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
   const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
@@ -40,8 +41,15 @@
   // Firebase 経由で最初に使う、軽くて速いモデル。gemini-3.8-flash は無料枠（全員で1日20回ほど）の
   // 混雑で30秒以内に答えないことがほとんどだったため、こちらを先に使い、だめなときだけ DEFAULT_MODEL で作り直す
   const FAST_MODEL = "gemini-3.5-flash-lite";
-  // 1回の問い合わせを打ち切るまでの時間。SDK の既定は180秒で、混雑時に3分待たされていた
+  // 1回の問い合わせを打ち切るまでの時間。SDK の既定は180秒で、混雑時に3分待たされていた。
+  // 問題が多いほど作るのに時間がかかるので、3問より多い分だけ1問4秒ずつ延ばす
   const AI_TIMEOUT_MS = 30_000;
+  const aiTimeoutMs = (count) => AI_TIMEOUT_MS + Math.max(0, count - DEFAULT_QUIZ_COUNT) * 4_000;
+
+  // 確認テストの問題の数（スライダーで選ぶ）
+  const MIN_QUIZ_COUNT = 1;
+  const MAX_QUIZ_COUNT = 10;
+  const DEFAULT_QUIZ_COUNT = 3;
   // 新規ユーザーには提供終了になった旧モデル。保存されていたら既定モデルに置き換える
   const RETIRED_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
 
@@ -178,6 +186,10 @@
     timerIconPlay: $("timerIconPlay"),
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
+    quizCountRange: $("quizCountRange"),
+    quizCountValue: $("quizCountValue"),
+    quizCountInline: $("quizCountInline"),
+    quizCountHint: $("quizCountHint"),
     analyticsToggle: $("analyticsToggle"),
     savePhotosRow: $("savePhotosRow"),
     savePhotosToggle: $("savePhotosToggle"),
@@ -789,6 +801,7 @@
         if (d.steps?.length) writeLocal(STORAGE_KEYS.steps, JSON.stringify(d.steps));
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
         if (d.savePhotos !== undefined) writeLocal(STORAGE_KEYS.savePhotos, d.savePhotos ? "1" : "0");
+        if (d.quizCount) writeLocal(STORAGE_KEYS.quizCount, String(d.quizCount));
         if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
@@ -822,6 +835,7 @@
       books: getBooks(),
       profile: getProfile(),
       savePhotos: savePhotosEnabled(),
+      quizCount: getQuizCount(),
       plans: getPlans(),
       updatedAt: serverTimestamp(),
     };
@@ -866,6 +880,7 @@
     renderBookList();
     renderProfileSummary();
     renderPhotoSaveNote();
+    renderQuizCount();
     renderStats();
     // ログインしたらアカウントに答えがあった → アンケートは閉じる
     if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab("home");
@@ -2135,6 +2150,7 @@
     renderPhotos();
 
     el.generateBtn.addEventListener("click", onGenerateQuiz);
+    initQuizCount();
     el.skipPhotoBtn.addEventListener("click", recordWithoutPhoto);
 
     el.demoBtn.addEventListener("click", () => {
@@ -2147,6 +2163,35 @@
     document.querySelectorAll(".back-btn").forEach((btn) =>
       btn.addEventListener("click", () => showScreen(btn.dataset.back))
     );
+  }
+
+  /* ---------- 問題の数（スライダー） ---------- */
+  function getQuizCount() {
+    const n = Number(storage.get(STORAGE_KEYS.quizCount, ""));
+    return Number.isInteger(n) && n >= MIN_QUIZ_COUNT && n <= MAX_QUIZ_COUNT ? n : DEFAULT_QUIZ_COUNT;
+  }
+
+  function renderQuizCount() {
+    const n = getQuizCount();
+    el.quizCountRange.value = String(n);
+    el.quizCountValue.textContent = n;
+    el.quizCountInline.textContent = n;
+    el.quizCountHint.classList.toggle("hidden", n <= 5);
+  }
+
+  function initQuizCount() {
+    // 動かしている間は表示だけ変え、指を離したら保存する（保存はアカウントにも同期される）
+    el.quizCountRange.addEventListener("input", () => {
+      const n = Number(el.quizCountRange.value);
+      el.quizCountValue.textContent = n;
+      el.quizCountInline.textContent = n;
+      el.quizCountHint.classList.toggle("hidden", n <= 5);
+    });
+    el.quizCountRange.addEventListener("change", () => {
+      storage.set(STORAGE_KEYS.quizCount, el.quizCountRange.value);
+      renderQuizCount();
+    });
+    renderQuizCount();
   }
 
   function isImageFile(file) {
@@ -2259,7 +2304,7 @@
     setLoading(true);
     hideError();
     const startedAt = Date.now();
-    track("quiz_generate_start", { photos: state.photos.length, report: state.reportLogTs ? 1 : 0 });
+    track("quiz_generate_start", { photos: state.photos.length, count: getQuizCount(), report: state.reportLogTs ? 1 : 0 });
     try {
       setPhase("写真の準備");
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
@@ -2271,10 +2316,10 @@
         : null;
       let quiz;
       if (useFirebase) {
-        quiz = await generateQuizWithFirebase({ images });
+        quiz = await generateQuizWithFirebase({ images, count: getQuizCount() });
       } else {
         setPhase("AIで問題を作成");
-        quiz = await generateQuizWithGemini({ apiKey, model: getModel(), images });
+        quiz = await generateQuizWithGemini({ apiKey, model: getModel(), images, count: getQuizCount() });
       }
       setLoading(false);
       el.quizTiming.textContent = `作成時間: ${timingSummary()}（写真 ${images.length}枚・${timing.imageKB}KB）`;
@@ -2404,8 +2449,8 @@
    *   決まった形のJSONだけが返ってくるようにする（構造化出力）
    * ========================================================== */
 
-  // AIに返してほしいJSONの形（OpenAPIスキーマのサブセット）
-  const QUIZ_RESPONSE_SCHEMA = {
+  // AIに返してほしいJSONの形（OpenAPIスキーマのサブセット）。questions の数は選んだ問題の数にする
+  const quizResponseSchema = (count) => ({
     type: "OBJECT",
     properties: {
       topic: {
@@ -2414,8 +2459,8 @@
       },
       questions: {
         type: "ARRAY",
-        minItems: 3,
-        maxItems: 3,
+        minItems: count,
+        maxItems: count,
         items: {
           type: "OBJECT",
           properties: {
@@ -2440,14 +2485,14 @@
     },
     required: ["topic", "questions"],
     propertyOrdering: ["topic", "questions"],
-  };
+  });
 
   // AIへの指示文
   const QUIZ_PROMPT = `あなたは学習をサポートする優しい家庭教師です。
 添付の写真（1枚または複数枚）は、ユーザーが今勉強している教科書・ノート・参考書などのページです。
 写真が複数ある場合は、すべての写真の内容からバランスよく出題してください。
 
-写真に写っている内容「だけ」に基づいて、理解を確認するための4択の確認テストを3問作成してください。
+写真に写っている内容「だけ」に基づいて、理解を確認するための4択の確認テストを{{COUNT}}問作成してください。
 
 ルール:
 - 問題・選択肢・解説はすべて日本語で書く（写真が英語教材などの場合、英単語・英文はそのまま使ってよい）
@@ -2456,10 +2501,12 @@
 - 選択肢は必ず4つ。正解は1つだけ。紛らわしすぎる選択肢は避ける
 - answerIndex は正解の選択肢の位置（0〜3）
 - explanation は1〜2文で簡潔に
+- 問題が多い場合は、同じことを何度も聞かず、写真のいろいろな部分から出題する
 - 写真が不鮮明、または学習内容が読み取れない場合は、写っている物から推測できる一般的な学習内容で問題を作り、topic に「（推測）」と付ける`;
 
   // 教材が選ばれていれば、問題作りの参考としてAIに伝える
-  function buildQuizPrompt() {
+  function buildQuizPrompt(count = getQuizCount()) {
+    const prompt = QUIZ_PROMPT.replace("{{COUNT}}", String(count));
     const notes = [];
     if (state.studyBook) {
       notes.push(`ユーザーが勉強している教材は「${state.studyBook}」です。写真の内容を優先し、教材名はテーマの推測に使ってください。`);
@@ -2471,36 +2518,36 @@
     if (purposes?.length) notes.push(`勉強の目的は「${purposes.join("、")}」です。`);
     const left = daysUntil(examDate);
     if (left !== null && left <= 60) notes.push(`目標の試験まであと${left}日です。本番を意識した問題にしてください。`);
-    return notes.length ? `${QUIZ_PROMPT}\n\n参考：\n- ${notes.join("\n- ")}` : QUIZ_PROMPT;
+    return notes.length ? `${prompt}\n\n参考：\n- ${notes.join("\n- ")}` : prompt;
   }
 
   /**
-   * 画像を Gemini に送って3問のクイズを生成する
+   * 画像を Gemini に送って、count 問のクイズを生成する
    * @returns {Promise<{topic:string, questions:Array}>}
    */
-  async function generateQuizWithGemini({ apiKey, model, images }) {
+  async function generateQuizWithGemini({ apiKey, model, images, count }) {
     const body = {
       contents: [
         {
           role: "user",
           parts: [
             ...images.map(({ base64, mimeType }) => ({ inline_data: { mime_type: mimeType, data: base64 } })),
-            { text: buildQuizPrompt() },
+            { text: buildQuizPrompt(count) },
           ],
         },
       ],
       // temperature は指定せずモデルの既定値を使う（Gemini 3 系は既定値での利用が推奨）
       generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: QUIZ_RESPONSE_SCHEMA,
-        // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
+        responseSchema: quizResponseSchema(count),
+        // Gemini 3 系は既定でじっくり考えるため遅い。確認テストを作る程度なら浅い思考で十分
         thinkingConfig: { thinkingLevel: "low" },
       },
     };
 
     // ネットワークが不安定な場合に備えてタイムアウトを設定
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    const timer = setTimeout(() => controller.abort(), 60_000 + Math.max(0, count - DEFAULT_QUIZ_COUNT) * 4_000);
 
     let res;
     try {
@@ -2555,24 +2602,24 @@
       throw new Error(`AIから回答が得られませんでした（理由: ${reason}）。`);
     }
 
-    return parseQuizJson(text);
+    return parseQuizJson(text, count);
   }
 
   /**
-   * Firebase AI Logic 経由で、画像から3問のクイズを生成する。
+   * Firebase AI Logic 経由で、画像から count 問のクイズを生成する。
    * APIキーは Firebase プロジェクト側で管理されるため、利用者の設定は不要。
    * モデルはサービス側で決める（DEFAULT_MODEL）。
    */
-  async function generateQuizWithFirebase({ images }) {
+  async function generateQuizWithFirebase({ images, count }) {
     const { getGenerativeModel, Schema, ThinkingLevel } = cloud.aiMod;
 
-    // QUIZ_RESPONSE_SCHEMA と同じ形を、Firebase SDK の Schema で表したもの
+    // quizResponseSchema() と同じ形を、Firebase SDK の Schema で表したもの
     const schema = Schema.object({
       properties: {
         topic: Schema.string({ description: "写真から読み取った学習内容のテーマ（短く）" }),
         questions: Schema.array({
-          minItems: 3,
-          maxItems: 3,
+          minItems: count,
+          maxItems: count,
           items: Schema.object({
             properties: {
               question: Schema.string({ description: "問題文" }),
@@ -2591,7 +2638,7 @@
       {
         label: "予備のAIで問題を作成",
         model: DEFAULT_MODEL,
-        // Gemini 3 系は既定でじっくり考えるため遅い。3問作る程度なら浅い思考で十分
+        // Gemini 3 系は既定でじっくり考えるため遅い。確認テストを作る程度なら浅い思考で十分
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
     ];
@@ -2615,12 +2662,12 @@
       });
       try {
         const result = await model.generateContent(
-          [buildQuizPrompt(), ...images.map(({ base64, mimeType }) => ({ inlineData: { mimeType, data: base64 } }))],
-          { timeout: AI_TIMEOUT_MS }
+          [buildQuizPrompt(count), ...images.map(({ base64, mimeType }) => ({ inlineData: { mimeType, data: base64 } }))],
+          { timeout: aiTimeoutMs(count) }
         );
         const text = result.response.text();
         if (!text) throw new Error("AIから回答が得られませんでした");
-        const quiz = parseQuizJson(text);
+        const quiz = parseQuizJson(text, count);
         // 集計用：どのモデルで作れたか
         state.lastModel = attempt.model;
         state.lastModelFallback = attempt !== attempts[0];
@@ -2636,7 +2683,7 @@
           throw new Error("画像がブロックされました。別の写真でお試しください。");
         }
         // 時間切れ・混雑・一時的なエラーなどは、次のモデルで試す
-        failures.push(`${attempt.model}: ${/abort|timeout|timed out/i.test(msg) ? `${AI_TIMEOUT_MS / 1000}秒で時間切れ` : msg}`);
+        failures.push(`${attempt.model}: ${/abort|timeout|timed out/i.test(msg) ? `${aiTimeoutMs(count) / 1000}秒で時間切れ` : msg}`);
       }
     }
 
@@ -2650,7 +2697,7 @@
   /**
    * AIの返したJSON文字列をパースし、形式を検証・正規化する
    */
-  function parseQuizJson(text) {
+  function parseQuizJson(text, count = DEFAULT_QUIZ_COUNT) {
     let obj;
     try {
       // 念のため ```json ... ``` で囲まれていた場合も取り除く
@@ -2672,7 +2719,7 @@
           q.answerIndex >= 0 &&
           q.answerIndex < q.choices.length
       )
-      .slice(0, 3)
+      .slice(0, count)
       .map((q) => ({
         question: q.question,
         choices: q.choices.map(String),
