@@ -433,6 +433,43 @@ body {
 /* 問題の数のスライダー */
 .quiz-range { accent-color: var(--primary); height: 2rem; }
 
+/* 集中モード */
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: calc(1.5rem + env(safe-area-inset-top)) 1.5rem calc(1.5rem + env(safe-area-inset-bottom));
+  color: #e2e8f0;
+  background: radial-gradient(circle at 50% 35%, #1e293b 0%, #0b1120 70%);
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+}
+.focus-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.3em; color: #64748b; }
+.focus-book { font-size: 1rem; font-weight: 700; color: #94a3b8; min-height: 1.5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-clock {
+  font-size: clamp(4rem, 22vw, 7rem);
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+}
+.focus-msg { font-size: 0.95rem; font-weight: 700; color: #fdba74; min-height: 1.5rem; }
+.focus-actions { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 20rem; margin-top: 2.5rem; }
+.focus-stop {
+  padding: 1rem;
+  border-radius: 9999px;
+  font-weight: 800;
+  color: #0b1120;
+  background: #fdba74;
+}
+.focus-stop:active { transform: scale(0.98); }
+.focus-min { font-size: 0.8rem; font-weight: 700; color: #64748b; text-decoration: underline; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
@@ -1036,6 +1073,7 @@ body {
             <svg id="timerIconStop" class="hidden w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
           </button>
           <p id="timerHint" class="timer-hint">タップでスタート。アプリを閉じても計り続けます</p>
+          <button id="focusEnterBtn" type="button" class="hidden text-xs font-bold text-orange-700 underline">⛶ 集中モードに戻る</button>
         </div>
 
         <!-- 記録する時間（タイマーを止めると足される。手で直してもOK） -->
@@ -1303,6 +1341,18 @@ body {
     </section>
   </div>
 
+  <!-- 集中モード（タイマー中は画面をこれだけにする） -->
+  <div id="focusOverlay" class="hidden focus-overlay" role="dialog" aria-label="集中モード">
+    <p class="focus-label">集中モード</p>
+    <p id="focusBook" class="focus-book"></p>
+    <p id="focusClock" class="focus-clock">00:00</p>
+    <p id="focusMsg" class="focus-msg"></p>
+    <div class="focus-actions">
+      <button id="focusStopBtn" type="button" class="focus-stop">■ 止めて記録する</button>
+      <button id="focusMinBtn" type="button" class="focus-min">画面を戻す（タイマーは続きます）</button>
+    </div>
+  </div>
+
   <!-- 紙吹雪用レイヤー -->
   <div id="confetti" class="pointer-events-none fixed inset-0 overflow-hidden"></div>
 
@@ -1387,6 +1437,7 @@ window.FIREBASE_VAPID_KEY =
   const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
+  const TIMER_BOOK_KEY = "habitApp.timerBook"; // タイマー中の教材（アプリを開き直したときに集中モードに出す）
   const MAX_STUDY_MINUTES = 600;
 
   // 既定のモデル（自分のAPIキーで使うとき）。提供終了になった場合はここ（または画面の設定欄）を変更する
@@ -1539,6 +1590,13 @@ window.FIREBASE_VAPID_KEY =
     timerIconPlay: $("timerIconPlay"),
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
+    focusOverlay: $("focusOverlay"),
+    focusBook: $("focusBook"),
+    focusClock: $("focusClock"),
+    focusMsg: $("focusMsg"),
+    focusStopBtn: $("focusStopBtn"),
+    focusMinBtn: $("focusMinBtn"),
+    focusEnterBtn: $("focusEnterBtn"),
     quizCountRange: $("quizCountRange"),
     quizCountValue: $("quizCountValue"),
     quizCountInline: $("quizCountInline"),
@@ -4617,6 +4675,8 @@ window.FIREBASE_VAPID_KEY =
     el.timerHint.textContent = started
       ? "計測中…止めると「記録する時間」に足されます"
       : "タップでスタート。アプリを閉じても計り続けます";
+    el.focusEnterBtn.classList.toggle("hidden", !started || isFocusOpen());
+    if (started && isFocusOpen()) renderFocus(started);
   }
 
   // タイマーは開始時刻を保存するので、アプリを閉じても計り続けられる
@@ -4625,13 +4685,109 @@ window.FIREBASE_VAPID_KEY =
     if (started) {
       const minutes = Math.max(1, Math.round((Date.now() - started) / 60000));
       writeLocal(TIMER_KEY, null);
+      writeLocal(TIMER_BOOK_KEY, null);
       clearInterval(timerTick);
+      closeFocus();
       setStudyMinutes(state.studyMinutes + minutes);
     } else {
       writeLocal(TIMER_KEY, String(Date.now()));
+      writeLocal(TIMER_BOOK_KEY, state.studyBook || null);
       timerTick = setInterval(renderTimer, 1000);
+      track("focus_start", { has_book: state.studyBook ? 1 : 0 });
+      openFocus(); // タイマーを始めたら、ほかの表示を消して集中できる画面にする
     }
     renderTimer();
+  }
+
+  /* ---------- 集中モード（タイマー中の全画面表示） ---------- */
+  let wakeLock = null;
+
+  function isFocusOpen() {
+    return !el.focusOverlay.classList.contains("hidden");
+  }
+
+  // 経過時間に合わせた、ひとことの声かけ
+  function focusMessage(min) {
+    if (min < 1) return "スタート！まずは目の前の1ページだけ";
+    if (min < 5) return "いい感じ。スマホは置いておこう";
+    if (min < 15) return "5分たった！その調子で続けよう";
+    if (min < 25) return "15分も集中できてる。すごい！";
+    if (min < 50) return "25分たったよ。5分休憩してもOK";
+    return "長時間おつかれさま。区切りのいいところで休もう";
+  }
+
+  function renderFocus(started = timerStartedAt()) {
+    if (!started) return;
+    const sec = Math.floor((Date.now() - started) / 1000);
+    el.focusClock.textContent = formatElapsed(sec);
+    el.focusMsg.textContent = focusMessage(Math.floor(sec / 60));
+  }
+
+  function openFocus() {
+    el.focusBook.textContent = state.studyBook ? `📚 ${state.studyBook}` : "";
+    el.focusOverlay.classList.remove("hidden");
+    renderFocus();
+    el.focusEnterBtn.classList.add("hidden");
+    keepScreenOn();
+  }
+
+  function closeFocus() {
+    el.focusOverlay.classList.add("hidden");
+    releaseScreen();
+  }
+
+  // 集中モードの間は画面が暗くならないようにする（対応していない端末では何もしない）
+  async function keepScreenOn() {
+    try {
+      if ("wakeLock" in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => (wakeLock = null));
+      }
+    } catch {
+      /* 省電力モードなどで使えないときは、そのまま */
+    }
+  }
+
+  function releaseScreen() {
+    wakeLock?.release().catch(() => {});
+    wakeLock = null;
+  }
+
+  // 記録の流れの「勉強の記録」画面を開いている状態にする（アプリを開き直したときなど）
+  function ensureStudyScreen() {
+    const onStudy = !TABS.flow.node.classList.contains("hidden") && !screens[2].classList.contains("hidden");
+    if (onStudy) return;
+    resetAll();
+    const book = storage.get(TIMER_BOOK_KEY, "");
+    if (book && getBooks().includes(book)) {
+      state.studyBook = book;
+      renderBookList();
+    }
+    showTab("flow");
+    showScreen(2);
+  }
+
+  function initFocus() {
+    el.focusStopBtn.addEventListener("click", () => {
+      ensureStudyScreen();
+      toggleTimer(); // 止めて「記録する時間」に足す
+    });
+    el.focusMinBtn.addEventListener("click", () => {
+      ensureStudyScreen();
+      closeFocus();
+      renderTimer();
+    });
+    el.focusEnterBtn.addEventListener("click", openFocus);
+    // 別のアプリから戻ってきたら、画面をつけたままにする設定をやり直す（OSが自動で外すため）
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && isFocusOpen()) keepScreenOn();
+    });
+    // タイマー中にアプリを開き直したら、集中モードから
+    if (timerStartedAt()) {
+      const book = storage.get(TIMER_BOOK_KEY, "");
+      if (book) state.studyBook = book;
+      openFocus();
+    }
   }
 
   function initStudy() {
@@ -5090,6 +5246,7 @@ window.FIREBASE_VAPID_KEY =
     initPlans();
     initOnboarding();
     initPrivacy();
+    initFocus();
     initTabs();
     if (isStandalone()) {
       el.reloadBtn.classList.remove("hidden");

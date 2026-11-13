@@ -418,6 +418,43 @@ body {
 /* 問題の数のスライダー */
 .quiz-range { accent-color: var(--primary); height: 2rem; }
 
+/* 集中モード */
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: calc(1.5rem + env(safe-area-inset-top)) 1.5rem calc(1.5rem + env(safe-area-inset-bottom));
+  color: #e2e8f0;
+  background: radial-gradient(circle at 50% 35%, #1e293b 0%, #0b1120 70%);
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+}
+.focus-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.3em; color: #64748b; }
+.focus-book { font-size: 1rem; font-weight: 700; color: #94a3b8; min-height: 1.5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-clock {
+  font-size: clamp(4rem, 22vw, 7rem);
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+}
+.focus-msg { font-size: 0.95rem; font-weight: 700; color: #fdba74; min-height: 1.5rem; }
+.focus-actions { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 20rem; margin-top: 2.5rem; }
+.focus-stop {
+  padding: 1rem;
+  border-radius: 9999px;
+  font-weight: 800;
+  color: #0b1120;
+  background: #fdba74;
+}
+.focus-stop:active { transform: scale(0.98); }
+.focus-min { font-size: 0.8rem; font-weight: 700; color: #64748b; text-decoration: underline; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;

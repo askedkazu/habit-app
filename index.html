@@ -437,6 +437,7 @@
             <svg id="timerIconStop" class="hidden w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
           </button>
           <p id="timerHint" class="timer-hint">タップでスタート。アプリを閉じても計り続けます</p>
+          <button id="focusEnterBtn" type="button" class="hidden text-xs font-bold text-orange-700 underline">⛶ 集中モードに戻る</button>
         </div>
 
         <!-- 記録する時間（タイマーを止めると足される。手で直してもOK） -->
@@ -702,6 +703,18 @@
         <button id="authModeBtn" class="link-btn">アカウントを作成する</button>
       </div>
     </section>
+  </div>
+
+  <!-- 集中モード（タイマー中は画面をこれだけにする） -->
+  <div id="focusOverlay" class="hidden focus-overlay" role="dialog" aria-label="集中モード">
+    <p class="focus-label">集中モード</p>
+    <p id="focusBook" class="focus-book"></p>
+    <p id="focusClock" class="focus-clock">00:00</p>
+    <p id="focusMsg" class="focus-msg"></p>
+    <div class="focus-actions">
+      <button id="focusStopBtn" type="button" class="focus-stop">■ 止めて記録する</button>
+      <button id="focusMinBtn" type="button" class="focus-min">画面を戻す（タイマーは続きます）</button>
+    </div>
   </div>
 
   <!-- 紙吹雪用レイヤー -->
