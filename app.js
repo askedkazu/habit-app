@@ -197,6 +197,8 @@
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
     modeToggle: $("modeToggle"),
+    modeWipe: $("modeWipe"),
+    modeWipeLabel: $("modeWipeLabel"),
     sameAgainBtn: $("sameAgainBtn"),
     qmSolved: $("qmSolved"),
     qmAccuracy: $("qmAccuracy"),
@@ -3146,6 +3148,32 @@
     showTab(homeTab());
   }
 
+  // ワイプの演出つきで切り替える（左から覆う → 中身を切り替える → 右へ抜ける）。
+  // 動きを減らす設定の端末や、演出の途中で押されたときは演出なしで切り替える
+  let wiping = false;
+  function switchModeWithWipe(on) {
+    if (wiping) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return setQuizMode(on);
+    wiping = true;
+    const wipe = el.modeWipe;
+    wipe.className = `mode-wipe ${on ? "to-quiz" : "to-normal"} wipe-in`;
+    el.modeWipeLabel.textContent = on ? "📝 問題モード" : "🏠 通常モード";
+    const after = (ms, fn) => setTimeout(fn, ms);
+    after(150, () => wipe.classList.add("show-label"));
+    after(380, () => {
+      setQuizMode(on); // 覆っている間に中身を切り替える
+      after(260, () => {
+        wipe.classList.remove("show-label", "wipe-in");
+        wipe.classList.add("wipe-out");
+        after(380, () => {
+          wipe.className = "hidden mode-wipe";
+          wiping = false;
+        });
+      });
+    });
+  }
+
   // 問題モードで1回分を始める：写真の画面を開く（このあとカメラ・アルバムを開く）
   function prepareQuizRound() {
     resetAll();
@@ -3203,8 +3231,8 @@
   }
 
   function initQuizMode() {
-    el.modeToggle.addEventListener("click", () => setQuizMode(!state.quizMode));
-    el.quickBtn.addEventListener("click", () => setQuizMode(true));
+    el.modeToggle.addEventListener("click", () => switchModeWithWipe(!state.quizMode));
+    el.quickBtn.addEventListener("click", () => switchModeWithWipe(true));
     // カメラ・アルバムは、ボタンを押した流れで開く（スマホはタップの中でしか開けないため）
     el.qmCameraBtn.addEventListener("click", () => {
       prepareQuizRound();

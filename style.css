@@ -511,6 +511,34 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
 .qm-big.qm-sub { color: #4c1d95; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 #qmAutoToggle { accent-color: var(--primary); }
 
+/* 問題モードの切り替え演出（ワイプ）：左から覆って、中身を切り替えて、右へ抜ける */
+.mode-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+.mode-wipe.to-quiz { background: linear-gradient(120deg, #7c3aed 0%, #4c1d95 100%); }
+.mode-wipe.to-normal { background: linear-gradient(120deg, #1a9cf0 0%, #3b6cf6 100%); }
+.mode-wipe.wipe-in { animation: wipeIn 0.38s cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+.mode-wipe.wipe-out { animation: wipeOut 0.38s cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+.mode-wipe span { opacity: 0; transform: translateX(-12px); transition: opacity 0.2s, transform 0.2s; }
+.mode-wipe.show-label span { opacity: 1; transform: none; }
+@keyframes wipeIn {
+  from { clip-path: polygon(0 0, 0 0, -20% 100%, -20% 100%); }
+  to { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
+}
+@keyframes wipeOut {
+  from { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
+  to { clip-path: polygon(120% 0, 120% 0, 100% 100%, 100% 100%); }
+}
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
