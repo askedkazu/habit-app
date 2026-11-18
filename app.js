@@ -150,6 +150,7 @@
     headerTitle: $("headerTitle"),
     flowCloseBtn: $("flowCloseBtn"),
     tabBar: $("tabBar"),
+    tabIndicator: $("tabIndicator"),
     // ホーム
     startBtn: $("startBtn"),
     homeDate: $("homeDate"),
@@ -419,10 +420,29 @@
   /* ==========================================================
    * 画面遷移
    * ========================================================== */
+  // 出てくる画面に、向きの分かるほんの少しの動きを付ける（同じ画面を出し直したときも動かす）
+  function animateIn(node, cls) {
+    node.classList.remove("anim-right", "anim-left", "anim-rise");
+    void node.offsetWidth; // アニメーションをもう一度最初から再生する
+    node.classList.add(cls);
+  }
+
+  let currentScreen = null;
+  const screenOrder = (name) => (name === "done" ? 5 : Number(name));
+
   function showScreen(name) {
     Object.entries(screens).forEach(([key, node]) => {
       node.classList.toggle("hidden", key !== String(name));
     });
+    // 先へ進むときは右から、戻るときは左から、達成画面は下から
+    const prev = currentScreen;
+    currentScreen = String(name);
+    if (prev !== null && prev !== currentScreen) {
+      animateIn(
+        screens[name],
+        name === "done" ? "anim-rise" : screenOrder(name) > screenOrder(prev) ? "anim-right" : "anim-left"
+      );
+    }
 
     // ステッパーの表示更新
     const current = name === "done" ? 5 : Number(name);
@@ -2887,6 +2907,11 @@
     el.quizFeedback.classList.add("hidden");
     el.nextQuestionBtn.classList.add("hidden");
 
+    // 2問目からは、次の問題が右から入ってくる
+    if (state.currentIndex > 0) {
+      animateIn(el.quizQuestion, "anim-right");
+      animateIn(el.quizChoices, "anim-right");
+    }
     el.quizChoices.innerHTML = "";
     q.choices.forEach((choice, i) => {
       const btn = document.createElement("button");
@@ -4097,8 +4122,24 @@
     quiz: { node: $("tabQuiz"), title: "問題モード" },
   };
 
+  // 下のタブの並び（ホームと問題モードのホームは同じ位置）
+  const TAB_ORDER = { home: 0, quiz: 0, record: 1, settings: 2 };
+  let currentTab = null;
+
   function showTab(name) {
     Object.entries(TABS).forEach(([key, tab]) => tab.node.classList.toggle("hidden", key !== name));
+    // タブを移るときは、移る方向から入ってくる。記録の流れやアンケートは下から
+    const prev = currentTab;
+    currentTab = name;
+    if (prev !== null && prev !== name) {
+      const from = TAB_ORDER[prev];
+      const to = TAB_ORDER[name];
+      animateIn(
+        TABS[name].node,
+        from === undefined || to === undefined ? "anim-rise" : to > from ? "anim-right" : to < from ? "anim-left" : "anim-rise"
+      );
+    }
+    if (TAB_ORDER[name] !== undefined) el.tabIndicator.style.transform = `translateX(${TAB_ORDER[name] * 100}%)`;
     el.headerTitle.textContent = TABS[name].title;
     // 記録の流れとアンケートの間はタブバーを隠す。記録の流れでは左上に「閉じる」を出す
     // 問題モードの間はタブバーを出さず、写真 → テストだけに集中できるようにする
