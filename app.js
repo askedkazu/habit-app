@@ -187,6 +187,12 @@
     timerIconPlay: $("timerIconPlay"),
     timerIconStop: $("timerIconStop"),
     skipPhotoBtn: $("skipPhotoBtn"),
+    quickBtn: $("quickBtn"),
+    quickBookBox: $("quickBookBox"),
+    quickBookList: $("quickBookList"),
+    photoBackBtn: $("photoBackBtn"),
+    quickAgainBtn: $("quickAgainBtn"),
+    photoTitle: $("photoTitle"),
     focusOverlay: $("focusOverlay"),
     focusBook: $("focusBook"),
     focusClock: $("focusClock"),
@@ -341,6 +347,7 @@
     studyBook: "",      // 選んだ教材（未選択なら空）
     studyMinutes: 0,    // 勉強時間（分）
     reportLogTs: null,  // 「あとで報告」の記録に写真を報告しているとき、その記録の ts
+    quickMode: false,   // 「問題だけ作る」モード（ちょいステップと勉強の記録を飛ばす）
     photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
@@ -1974,6 +1981,7 @@
       const sub = document.createElement("p");
       sub.className = "text-xs text-slate-500";
       const parts = [];
+      if (log.mode === "quiz") parts.push("📝 問題だけ");
       if (log.book) parts.push(`📚 ${log.book}`);
       if (log.minutes) parts.push(`⏱ ${formatMinutes(log.minutes)}`);
       if (log.steps && !log.book && !log.minutes) parts.push(`ステップ ${log.steps}個`);
@@ -2935,6 +2943,8 @@
     el.doneStreak.classList.remove("bump");
     el.doneStreak.textContent = calcStreak(getHistory());
     el.doneStreakNote.textContent = "写真の報告ありがとう！記録を更新しました";
+    el.quickAgainBtn.classList.add("hidden");
+    el.restartBtn.classList.replace("btn-ghost", "btn-primary");
     showNewBadges([]);
     showScoreMessage(c, total);
     showScreen("done");
@@ -2987,6 +2997,7 @@
       steps: state.checkedCount || 0,
       book: state.studyBook || "",
       minutes: state.studyMinutes || 0,
+      ...(state.quickMode ? { mode: "quiz" } : {}),
       ...log,
     });
     recordAchievement();
@@ -2998,6 +3009,10 @@
     showNewBadges(earnedBadgeIds(after).filter((id) => !badgesBefore.includes(id)));
     if (score !== undefined) el.doneScore.textContent = score;
     if (message !== undefined) el.doneMessage.textContent = message;
+    // 問題だけ作るモードなら、すぐ次の問題へ進めるボタンを出す
+    el.quickAgainBtn.classList.toggle("hidden", !state.quickMode);
+    el.restartBtn.classList.toggle("btn-primary", !state.quickMode);
+    el.restartBtn.classList.toggle("btn-ghost", state.quickMode);
 
     showScreen("done");
     launchConfetti();
@@ -3053,10 +3068,55 @@
   }
 
   // 最初からやり直す（写真・チェックをリセット）
+  /* ---------- 問題だけ作るモード ---------- */
+  // ちょいステップと勉強の記録を飛ばして、写真 → テストだけをする。関係ない表示は隠す
+  function setQuickMode(on) {
+    state.quickMode = on;
+    el.stepper.classList.toggle("hidden", on);
+    el.quickBookBox.classList.toggle("hidden", !on);
+    el.photoBackBtn.classList.toggle("hidden", on);
+    el.skipPhotoBtn.classList.toggle("hidden", on);
+    el.photoTitle.textContent = on ? "写真を撮って問題を作ろう" : "証拠写真を撮ろう";
+    if (on) renderQuickBooks();
+  }
+
+  function startQuick() {
+    resetAll();
+    setQuickMode(true);
+    track("quick_start");
+    showTab("flow");
+    showScreen(3);
+    el.headerTitle.textContent = "問題だけ作る";
+  }
+
+  // 写真の画面で選ぶ教材（勉強の記録の画面と同じ選び方）
+  function renderQuickBooks() {
+    const books = getBooks();
+    el.quickBookList.innerHTML = "";
+    if (books.length === 0) {
+      const p = document.createElement("p");
+      p.className = "text-xs text-slate-400";
+      p.textContent = "教材は「今日のちょいステップを始める」の勉強の記録の画面で追加できます";
+      el.quickBookList.append(p);
+    }
+    books.forEach((name) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `book-chip${state.studyBook === name ? " selected" : ""}`;
+      btn.textContent = name;
+      btn.addEventListener("click", () => {
+        state.studyBook = state.studyBook === name ? "" : name;
+        renderQuickBooks();
+      });
+      el.quickBookList.append(btn);
+    });
+  }
+
   function resetAll() {
     clearPhotos();
     state.quiz = null;
     state.reportLogTs = null;
+    setQuickMode(false);
     el.skipPhotoBtn.classList.remove("hidden");
     hideError();
     renderShortSteps();
@@ -3824,6 +3884,8 @@
       showTab("flow");
     });
     el.flowCloseBtn.addEventListener("click", () => showTab("home"));
+    el.quickBtn.addEventListener("click", startQuick);
+    el.quickAgainBtn.addEventListener("click", startQuick);
     el.restartBtn.addEventListener("click", () => {
       resetAll();
       showTab("home");

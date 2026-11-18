@@ -67,6 +67,8 @@
       <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
         今日のちょいステップを始める
       </button>
+      <!-- 問題だけ作るモード（写真 → テストだけ） -->
+      <button id="quickBtn" class="btn-ghost w-full mt-2 py-3 text-sm">📝 問題だけ作る（写真 → テスト）</button>
 
       <!-- 写真をあとで報告する記録があるとき -->
       <section id="pendingCard" class="hidden card mt-4 flex items-center gap-3">
@@ -465,12 +467,18 @@
 
       <!-- STEP 3: 証拠写真アップロード -->
       <section id="step2" class="card screen hidden">
-        <h2 class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
+        <h2 id="photoTitle" class="font-bold text-lg mb-1">証拠写真を撮ろう</h2>
         <p class="text-sm text-slate-500 mb-2">開いた教科書やノートを撮影すると、AIがその内容から<span id="quizCountInline">3</span>問のテストを作ります。<span id="photoMaxNote"></span></p>
         <p id="photoSaveNote" class="hidden text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-4">
           📷 写真は小さく縮めて、アプリの管理者が確認できる形で保存されます（60日で自動削除）。設定タブの「プライバシー」でオフにできます
         </p>
         <div id="photoSaveSpacer" class="mb-2"></div>
+
+        <!-- 問題だけ作るモードのときだけ：教材を選ぶ（任意。AIの参考にする） -->
+        <div id="quickBookBox" class="hidden mb-4">
+          <p class="field-label">📚 教材（任意）</p>
+          <div id="quickBookList" class="flex flex-wrap gap-2"></div>
+        </div>
 
         <!-- まだ写真がないときの枠（タップするとアルバムから選択） -->
         <label for="photoInput" id="photoDropzone" class="photo-drop">
@@ -524,7 +532,7 @@
         </div>
         <p id="errorMsg" class="hidden mt-4 text-sm text-rose-600 bg-rose-50 rounded-lg p-3 whitespace-pre-wrap"></p>
 
-        <button class="back-btn text-sm text-slate-500 mt-4" data-back="2">← 勉強の記録に戻る</button>
+        <button id="photoBackBtn" class="back-btn text-sm text-slate-500 mt-4" data-back="2">← 勉強の記録に戻る</button>
       </section>
 
       <!-- STEP 4: 確認テスト -->
@@ -568,6 +576,7 @@
           <p id="doneMessage" class="text-sm text-slate-500 mt-1"></p>
         </div>
 
+        <button id="quickAgainBtn" class="hidden btn-primary btn-cta w-full mt-5">📝 続けて問題を作る</button>
         <button id="restartBtn" class="btn-primary btn-cta w-full mt-5">ホームに戻る</button>
       </section>
     </main>
