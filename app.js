@@ -197,6 +197,11 @@
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
     modeToggle: $("modeToggle"),
+    feedbackKinds: $("feedbackKinds"),
+    feedbackText: $("feedbackText"),
+    feedbackCount: $("feedbackCount"),
+    feedbackSendBtn: $("feedbackSendBtn"),
+    feedbackMsg: $("feedbackMsg"),
     modeWipe: $("modeWipe"),
     modeWipeLabel: $("modeWipeLabel"),
     sameAgainBtn: $("sameAgainBtn"),
@@ -523,6 +528,66 @@
   function setAnalyticsEnabled(enabled) {
     writeLocal(ANALYTICS_OPTOUT_KEY, enabled ? null : "1");
     if (analytics.instance) analytics.mod.setAnalyticsCollectionEnabled(analytics.instance, enabled);
+  }
+
+  /* ---------- フィードバック（設定タブの一番下） ---------- */
+  // Firestore の feedback に保存し、管理者ページで読む。送れるのはログインしている人だけ
+  let feedbackKind = "bug";
+
+  function showFeedbackMsg(text, ok) {
+    el.feedbackMsg.textContent = text;
+    el.feedbackMsg.className = `text-sm mt-2 rounded-lg p-2 ${ok ? "msg-ok" : "msg-error"}`;
+  }
+
+  function updateFeedbackButton() {
+    const len = el.feedbackText.value.trim().length;
+    el.feedbackCount.textContent = `${el.feedbackText.value.length} / 1000`;
+    el.feedbackSendBtn.disabled = len === 0;
+  }
+
+  async function sendFeedback() {
+    const text = el.feedbackText.value.trim();
+    if (!text) return;
+    if (!cloud.user) {
+      showFeedbackMsg("フィードバックを送るには、ログインしてください", false);
+      return;
+    }
+    el.feedbackSendBtn.disabled = true;
+    try {
+      const { addDoc, collection } = cloud.fsMod;
+      await addDoc(collection(cloud.db, "feedback"), {
+        uid: cloud.user.uid,
+        ts: Date.now(),
+        kind: feedbackKind,
+        text: text.slice(0, 1000),
+        // 不具合を調べるときの手がかり（名前やメールアドレスは送らない）
+        mode: state.quizMode ? "quiz" : "normal",
+        standalone: isStandalone(),
+      });
+      track("feedback_sent", { kind: feedbackKind });
+      el.feedbackText.value = "";
+      updateFeedbackButton();
+      showFeedbackMsg("送りました。ありがとうございます！🙏", true);
+    } catch (err) {
+      console.error(err);
+      showFeedbackMsg("送れませんでした。時間をおいて、もう一度お試しください", false);
+      el.feedbackSendBtn.disabled = false;
+    }
+  }
+
+  function initFeedback() {
+    el.feedbackKinds.querySelectorAll("[data-kind]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        feedbackKind = btn.dataset.kind;
+        el.feedbackKinds.querySelectorAll("[data-kind]").forEach((b) => b.classList.toggle("selected", b === btn));
+      })
+    );
+    el.feedbackText.addEventListener("input", () => {
+      updateFeedbackButton();
+      el.feedbackMsg.classList.add("hidden");
+    });
+    el.feedbackSendBtn.addEventListener("click", sendFeedback);
+    updateFeedbackButton();
   }
 
   function initPrivacy() {
@@ -4075,6 +4140,7 @@
     initPlans();
     initOnboarding();
     initPrivacy();
+    initFeedback();
     initFocus();
     initTabs();
     if (isStandalone()) {

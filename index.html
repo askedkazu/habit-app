@@ -364,6 +364,24 @@
         <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
       </section>
 
+      <!-- フィードバック（管理者に届く） -->
+      <section class="card">
+        <p class="text-sm font-bold">💬 フィードバック</p>
+        <p class="text-xs text-slate-500 mt-0.5">不具合や「こうしてほしい」を気軽に送ってください。管理者に届きます（返信はできません）</p>
+        <div id="feedbackKinds" class="flex flex-wrap gap-2 mt-3">
+          <button type="button" class="book-chip selected" data-kind="bug">🐞 不具合</button>
+          <button type="button" class="book-chip" data-kind="idea">💡 こうしてほしい</button>
+          <button type="button" class="book-chip" data-kind="other">💬 その他</button>
+        </div>
+        <textarea id="feedbackText" rows="4" maxlength="1000" class="input w-full mt-3 resize-none"
+                  placeholder="例：問題モードで写真を撮ったら止まった／タイマーの音がほしい"></textarea>
+        <div class="flex items-center justify-between gap-3 mt-2">
+          <span id="feedbackCount" class="text-xs text-slate-400">0 / 1000</span>
+          <button id="feedbackSendBtn" class="btn-primary text-sm px-5" disabled>送る</button>
+        </div>
+        <p id="feedbackMsg" class="hidden text-sm mt-2 rounded-lg p-2"></p>
+      </section>
+
       <p class="text-center text-xs text-slate-400 pt-2">ちょいステップ習慣 ・ 小さく始めて、写真で証明、AIで確認。</p>
     </main>
 
@@ -697,6 +715,7 @@
             <li>達成した日、記録（教材・勉強時間・テストのテーマと正解数）、勉強の予定</li>
             <li>アンケートの答え（立場・学年や年代・目的・目標・試験日・目標時間・時間帯・悩み）、ちょいステップ、教材の一覧</li>
             <li>通知の設定と、通知を届けるための端末ごとの宛先</li>
+            <li>フィードバックを送ったときは、その内容（と、通常モード・問題モードのどちらで使っていたか）</li>
             <li>カレンダー連携をしたときは、予定の入っている時間帯（予定の名前や内容は保存しません）と、URLで連携した場合はそのURL</li>
           </ul>
           <ul>

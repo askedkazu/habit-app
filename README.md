@@ -102,9 +102,15 @@ APIキーがなくても「APIキーなしでデモ問題を試す」で画面�
         allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
         allow read, delete: if isAdmin();
       }
+      match /feedback/{id} {
+        allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+        allow read, delete: if isAdmin();
+      }
     }
   }
   ```
+- **フィードバック**：設定タブの一番下から、種類（不具合／こうしてほしい／その他）と文章を `feedback` に送る（ログイン中のみ）。
+  管理者ページの「💬 フィードバック」で読み、「対応済みにして消す」で消せる
 
 ## 問題モード
 

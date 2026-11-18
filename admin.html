@@ -42,6 +42,7 @@
       <div class="flex gap-2 mb-4">
         <button class="admin-tab book-chip selected" data-view="photos">📷 証拠写真</button>
         <button class="admin-tab book-chip" data-view="users">👤 利用者</button>
+        <button class="admin-tab book-chip" data-view="feedback">💬 フィードバック</button>
       </div>
 
       <!-- 証拠写真 -->
@@ -59,6 +60,12 @@
       <!-- 利用者 -->
       <section id="viewUsers" class="hidden">
         <div id="userList" class="grid gap-3 lg:grid-cols-2"></div>
+      </section>
+
+      <!-- フィードバック -->
+      <section id="viewFeedback" class="hidden">
+        <p id="feedbackCountText" class="text-xs text-slate-500 mb-3"></p>
+        <div id="feedbackList" class="grid gap-3 lg:grid-cols-2"></div>
       </section>
     </div>
   </div>

@@ -26,6 +26,9 @@ const el = {
   photoList: $("photoList"),
   photoMoreBtn: $("photoMoreBtn"),
   userList: $("userList"),
+  viewFeedback: $("viewFeedback"),
+  feedbackList: $("feedbackList"),
+  feedbackCountText: $("feedbackCountText"),
   zoom: $("photoZoom"),
   zoomImg: $("photoZoomImg"),
 };
@@ -79,6 +82,7 @@ async function init() {
       document.querySelectorAll(".admin-tab").forEach((b) => b.classList.toggle("selected", b === btn));
       el.viewPhotos.classList.toggle("hidden", btn.dataset.view !== "photos");
       el.viewUsers.classList.toggle("hidden", btn.dataset.view !== "users");
+      el.viewFeedback.classList.toggle("hidden", btn.dataset.view !== "feedback");
     })
   );
   el.zoom.addEventListener("click", () => el.zoom.classList.add("hidden"));
@@ -97,6 +101,14 @@ async function init() {
     try {
       await loadUsers();
       await loadPhotos();
+      // フィードバックはルールを足す前だと読めないので、失敗しても写真・利用者は表示する
+      await loadFeedback().catch((err) => {
+        console.error(err);
+        el.feedbackCountText.textContent =
+          err.code === "permission-denied"
+            ? "フィードバックを読む権限がありません。Firestore のルールに feedback の行を足してください（README参照）"
+            : `フィードバックを読み込めませんでした（${err.code || err.message}）`;
+      });
       setMessage("");
       el.body.classList.remove("hidden");
     } catch (err) {
@@ -268,6 +280,45 @@ function renderPhoto(p) {
   });
   card.append(head, meta, grid);
   el.photoList.append(card);
+}
+
+/* ---------- フィードバック ---------- */
+const FEEDBACK_KINDS = { bug: "🐞 不具合", idea: "💡 こうしてほしい", other: "💬 その他" };
+
+async function loadFeedback() {
+  const { collection, getDocs, query, orderBy, limit } = fb.fsMod;
+  const snap = await getDocs(query(collection(fb.db, "feedback"), orderBy("ts", "desc"), limit(200)));
+  el.feedbackList.innerHTML = "";
+  el.feedbackCountText.textContent = snap.docs.length ? `${snap.docs.length}件（新しい順）` : "まだフィードバックはありません";
+  snap.docs.forEach((d) => {
+    const f = d.data();
+    const card = document.createElement("section");
+    card.className = "card";
+    const head = document.createElement("div");
+    head.className = "flex items-center justify-between gap-2 text-sm";
+    const who = document.createElement("span");
+    who.className = "font-bold";
+    who.textContent = `${FEEDBACK_KINDS[f.kind] || "💬"} ・ ${pseudonym(f.uid)}`;
+    const when = document.createElement("span");
+    when.className = "text-xs text-slate-500";
+    when.textContent = formatDateTime(f.ts);
+    head.append(who, when);
+    const body = document.createElement("p");
+    body.className = "text-sm text-slate-800 mt-2 whitespace-pre-wrap break-words";
+    body.textContent = f.text;
+    const meta = document.createElement("p");
+    meta.className = "text-xs text-slate-400 mt-2";
+    meta.textContent = [f.mode === "quiz" ? "問題モード" : "通常モード", f.standalone ? "ホーム画面のアプリ" : "ブラウザ"].join(" ・ ");
+    const del = document.createElement("button");
+    del.className = "text-xs font-bold text-slate-400 underline mt-2";
+    del.textContent = "対応済みにして消す";
+    del.addEventListener("click", async () => {
+      await fb.fsMod.deleteDoc(d.ref);
+      card.remove();
+    });
+    card.append(head, body, meta, del);
+    el.feedbackList.append(card);
+  });
 }
 
 init().catch((err) => {
