@@ -455,6 +455,62 @@ body {
 .focus-stop:active { transform: scale(0.98); }
 .focus-min { font-size: 0.8rem; font-weight: 700; color: #64748b; text-decoration: underline; }
 
+/* ---------- 問題モード（紫系の配色に切り替える） ---------- */
+.mode-toggle {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.4rem 0.75rem;
+  border-radius: 9999px;
+  background: #f3e8ff;
+  color: #6d28d9;
+  white-space: nowrap;
+}
+body.quiz-mode {
+  --primary: #8b5cf6;
+  --primary-dark: #6d28d9;
+  --primary-soft: #f3e8ff;
+  --bg: #f5f3ff;
+  --line: #e9e3f7;
+}
+body.quiz-mode .app-header { background: rgba(46, 16, 101, 0.95); border-bottom-color: #4c1d95; color: #f5f3ff; }
+body.quiz-mode .app-header .icon-btn { color: #ede9fe; }
+body.quiz-mode .app-header .icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+body.quiz-mode .mode-toggle { background: #ede9fe; color: #4c1d95; }
+body.quiz-mode .spinner { border-color: #ddd6fe; border-top-color: var(--primary); }
+body.quiz-mode .text-sky-600 { color: var(--primary-dark); }
+body.quiz-mode .photo-drop { border-color: #c4b5fd; }
+body.quiz-mode .btn-cta { box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3); }
+/* 解き終わった画面は、点数を大きく。連続日数の演出は出さない */
+body.quiz-mode #stepDone .done-card,
+body.quiz-mode #stepDone #newBadges { display: none !important; }
+body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
+.qm-accent { color: var(--primary-dark); }
+
+.quiz-hero {
+  color: #fff;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+}
+.qm-big {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 1.4rem 0.5rem;
+  border-radius: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 8px 18px rgba(139, 92, 246, 0.35);
+  transition: transform 0.1s;
+}
+.qm-big:active { transform: scale(0.97); }
+.qm-big.qm-sub { color: #4c1d95; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+#qmAutoToggle { accent-color: var(--primary); }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;

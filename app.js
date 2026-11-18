@@ -35,6 +35,9 @@
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
   const TIMER_BOOK_KEY = "habitApp.timerBook"; // タイマー中の教材（アプリを開き直したときに集中モードに出す）
+  // 問題モード（端末ごとの値なのでアカウントには同期しない）
+  const QUIZ_MODE_KEY = "habitApp.quizMode"; // "1" なら問題モード
+  const QM_AUTO_KEY = "habitApp.qmAuto"; // "0" なら、写真を撮ってもすぐには問題を作らない
   const MAX_STUDY_MINUTES = 600;
 
   // 既定のモデル（自分のAPIキーで使うとき）。提供終了になった場合はここ（または画面の設定欄）を変更する
@@ -193,6 +196,17 @@
     photoBackBtn: $("photoBackBtn"),
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
+    modeToggle: $("modeToggle"),
+    sameAgainBtn: $("sameAgainBtn"),
+    qmSolved: $("qmSolved"),
+    qmAccuracy: $("qmAccuracy"),
+    qmCameraBtn: $("qmCameraBtn"),
+    qmAlbumBtn: $("qmAlbumBtn"),
+    qmBookList: $("qmBookList"),
+    qmCountRange: $("qmCountRange"),
+    qmCountValue: $("qmCountValue"),
+    qmAutoToggle: $("qmAutoToggle"),
+    qmRecent: $("qmRecent"),
     focusOverlay: $("focusOverlay"),
     focusBook: $("focusBook"),
     focusClock: $("focusClock"),
@@ -347,7 +361,10 @@
     studyBook: "",      // 選んだ教材（未選択なら空）
     studyMinutes: 0,    // 勉強時間（分）
     reportLogTs: null,  // 「あとで報告」の記録に写真を報告しているとき、その記録の ts
-    quickMode: false,   // 「問題だけ作る」モード（ちょいステップと勉強の記録を飛ばす）
+    quickMode: false,   // 写真 → テストだけの流れ（ちょいステップと勉強の記録を飛ばす）
+    quizMode: false,    // 問題モード（アプリ全体を、写真 → テストをくり返す専用にする）
+    avoidQuestions: [], // 「同じ写真で別の問題」のとき、前に出した問題（同じ問題を避ける）
+    photosSaved: false, // 今の写真を、管理者用にもう保存したか（同じ写真で作り直したとき二重に保存しない）
     photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
@@ -898,7 +915,7 @@
     renderQuizCount();
     renderStats();
     // ログインしたらアカウントに答えがあった → アンケートは閉じる
-    if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab("home");
+    if (!TABS.onboarding.node.classList.contains("hidden") && getProfile().done) showTab(homeTab());
   }
 
   /* ==========================================================
@@ -1855,6 +1872,7 @@
   function renderStats() {
     renderHome();
     renderRecord();
+    renderQuizHome();
   }
 
   function renderHome() {
@@ -2159,7 +2177,13 @@
       input.addEventListener("change", () => {
         const files = [...(input.files || [])];
         input.value = ""; // 同じ写真を選び直しても change が発火するように
-        if (files.length) addPhotos(files);
+        if (!files.length) return;
+        addPhotos(files);
+        // 問題モードで「撮ったらすぐ作る」なら、そのまま問題を作る
+        const onPhotoScreen = !TABS.flow.node.classList.contains("hidden") && !screens[3].classList.contains("hidden");
+        if (state.quizMode && qmAutoEnabled() && onPhotoScreen && state.photos.length && el.loading.classList.contains("hidden")) {
+          onGenerateQuiz();
+        }
       });
     });
     el.photoMaxNote.textContent = `（写真は${MAX_PHOTOS}枚まで）`;
@@ -2191,6 +2215,8 @@
     const n = getQuizCount();
     el.quizCountRange.value = String(n);
     el.quizCountValue.textContent = n;
+    el.qmCountRange.value = String(n);
+    el.qmCountValue.textContent = n;
     el.quizCountInline.textContent = n;
     el.quizCountHint.classList.toggle("hidden", n <= 5);
   }
@@ -2241,6 +2267,8 @@
   function clearPhotos() {
     state.photos.forEach((p) => URL.revokeObjectURL(p.url));
     state.photos = [];
+    state.avoidQuestions = [];
+    state.photosSaved = false;
     renderPhotos();
   }
 
@@ -2534,6 +2562,10 @@
     if (purposes?.length) notes.push(`勉強の目的は「${purposes.join("、")}」です。`);
     const left = daysUntil(examDate);
     if (left !== null && left <= 60) notes.push(`目標の試験まであと${left}日です。本番を意識した問題にしてください。`);
+    // 同じ写真で作り直すときは、前に出した問題と違う問題にする
+    if (state.avoidQuestions.length) {
+      notes.push(`この写真からは、すでに次の問題を出しています。これらとは違う内容・聞き方の問題を作ってください：${state.avoidQuestions.slice(-30).map((q) => `「${q}」`).join("、")}`);
+    }
     return notes.length ? `${prompt}\n\n参考：\n- ${notes.join("\n- ")}` : prompt;
   }
 
@@ -2865,7 +2897,8 @@
   async function saveEvidencePhotos(meta) {
     const thumbs = state.photoThumbs;
     state.photoThumbs = null;
-    if (!thumbs?.length || !cloud.user || !savePhotosEnabled()) return;
+    if (!thumbs?.length || !cloud.user || !savePhotosEnabled() || state.photosSaved) return;
+    state.photosSaved = true;
     const images = thumbs
       .filter((t) => (t.base64.length * 3) / 4 <= SAVED_PHOTO_MAX_BYTES)
       .map((t) => `data:${t.mimeType};base64,${t.base64}`);
@@ -2944,7 +2977,9 @@
     el.doneStreak.textContent = calcStreak(getHistory());
     el.doneStreakNote.textContent = "写真の報告ありがとう！記録を更新しました";
     el.quickAgainBtn.classList.add("hidden");
+    el.sameAgainBtn.classList.add("hidden");
     el.restartBtn.classList.replace("btn-ghost", "btn-primary");
+    el.restartBtn.textContent = state.quizMode ? "🏠 問題モードのホーム" : "ホームに戻る";
     showNewBadges([]);
     showScoreMessage(c, total);
     showScreen("done");
@@ -2953,6 +2988,14 @@
 
   function showScoreMessage(c, total) {
     el.doneScore.textContent = `${total}問中 ${c}問 正解`;
+    if (state.quizMode) {
+      // 問題モードは続けて解くので、次の1回につながる声かけにする
+      el.doneMessage.textContent =
+        c === total
+          ? "パーフェクト！💯 次の写真でもいってみよう"
+          : "間違えたところは解説を見直そう。「同じ写真で別の問題」でもう一度確かめられます";
+      return;
+    }
     el.doneMessage.textContent =
       c === total
         ? "パーフェクト！内容がしっかり頭に入っています 💯"
@@ -3009,10 +3052,12 @@
     showNewBadges(earnedBadgeIds(after).filter((id) => !badgesBefore.includes(id)));
     if (score !== undefined) el.doneScore.textContent = score;
     if (message !== undefined) el.doneMessage.textContent = message;
-    // 問題だけ作るモードなら、すぐ次の問題へ進めるボタンを出す
+    // 写真 → テストだけの流れなら、すぐ次の問題へ進めるボタンを出す
     el.quickAgainBtn.classList.toggle("hidden", !state.quickMode);
+    el.sameAgainBtn.classList.toggle("hidden", !(state.quickMode && state.photos.length && state.quiz));
     el.restartBtn.classList.toggle("btn-primary", !state.quickMode);
     el.restartBtn.classList.toggle("btn-ghost", state.quickMode);
+    el.restartBtn.textContent = state.quizMode ? "🏠 問題モードのホーム" : "ホームに戻る";
 
     showScreen("done");
     launchConfetti();
@@ -3080,14 +3125,109 @@
     if (on) renderQuickBooks();
   }
 
-  function startQuick() {
+  /* ---------- 問題モード ---------- */
+  // ワンタップで切り替え。配色を変え、ホームを「写真 → テスト」をくり返す専用の画面にする
+  function homeTab() {
+    return state.quizMode ? "quiz" : "home";
+  }
+
+  function qmAutoEnabled() {
+    return storage.get(QM_AUTO_KEY, "1") !== "0";
+  }
+
+  function setQuizMode(on, { silent = false } = {}) {
+    state.quizMode = on;
+    writeLocal(QUIZ_MODE_KEY, on ? "1" : null);
+    document.body.classList.toggle("quiz-mode", on);
+    el.modeToggle.textContent = on ? "🏠 通常に戻る" : "📝 問題モード";
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", on ? "#2e1065" : "#ffffff");
+    if (!silent) track(on ? "quiz_mode_on" : "quiz_mode_off");
+    resetAll();
+    showTab(homeTab());
+  }
+
+  // 問題モードで1回分を始める：写真の画面を開く（このあとカメラ・アルバムを開く）
+  function prepareQuizRound() {
     resetAll();
     setQuickMode(true);
-    track("quick_start");
     showTab("flow");
     showScreen(3);
-    el.headerTitle.textContent = "問題だけ作る";
+    el.headerTitle.textContent = state.quizMode ? "問題モード" : "問題だけ作る";
   }
+
+  // 同じ写真で、前と違う問題を作り直す
+  function regenerateSame() {
+    if (!state.photos.length) return;
+    state.avoidQuestions.push(...(state.quiz?.questions || []).map((q) => q.question));
+    state.quiz = null;
+    track("quiz_regenerate_same", { photos: state.photos.length });
+    showTab("flow");
+    showScreen(3);
+    el.headerTitle.textContent = state.quizMode ? "問題モード" : "問題だけ作る";
+    onGenerateQuiz();
+  }
+
+  function renderQuizHome() {
+    // 今日解いた問題数と正解率（テストを解いた記録から）
+    const today = dateKey();
+    const solvedLogs = getLogs().filter((l) => l.total);
+    const todays = solvedLogs.filter((l) => l.date === today);
+    const total = todays.reduce((sum, l) => sum + l.total, 0);
+    const correct = todays.reduce((sum, l) => sum + (l.correct || 0), 0);
+    el.qmSolved.textContent = total;
+    el.qmAccuracy.textContent = total ? `正解率 ${Math.round((correct / total) * 100)}%（${correct}/${total}問）・${todays.length}回` : "正解率 —　まずは1回、撮ってみよう";
+
+    // 教材（勉強の記録の画面と同じ選び方）
+    el.qmBookList.innerHTML = "";
+    const books = getBooks();
+    if (books.length === 0) {
+      const p = document.createElement("p");
+      p.className = "text-xs text-slate-400";
+      p.textContent = "教材は、通常モードの勉強の記録の画面で追加できます";
+      el.qmBookList.append(p);
+    }
+    books.forEach((name) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `book-chip${state.studyBook === name ? " selected" : ""}`;
+      btn.textContent = name;
+      btn.addEventListener("click", () => {
+        state.studyBook = state.studyBook === name ? "" : name;
+        renderQuizHome();
+      });
+      el.qmBookList.append(btn);
+    });
+
+    el.qmAutoToggle.checked = qmAutoEnabled();
+    renderLogList(el.qmRecent, solvedLogs.reverse().slice(0, 5));
+  }
+
+  function initQuizMode() {
+    el.modeToggle.addEventListener("click", () => setQuizMode(!state.quizMode));
+    el.quickBtn.addEventListener("click", () => setQuizMode(true));
+    // カメラ・アルバムは、ボタンを押した流れで開く（スマホはタップの中でしか開けないため）
+    el.qmCameraBtn.addEventListener("click", () => {
+      prepareQuizRound();
+      el.cameraInput.click();
+    });
+    el.qmAlbumBtn.addEventListener("click", () => {
+      prepareQuizRound();
+      el.photoInput.click();
+    });
+    el.quickAgainBtn.addEventListener("click", () => {
+      prepareQuizRound();
+      el.cameraInput.click();
+    });
+    el.sameAgainBtn.addEventListener("click", regenerateSame);
+    el.qmAutoToggle.addEventListener("change", () => writeLocal(QM_AUTO_KEY, el.qmAutoToggle.checked ? null : "0"));
+    el.qmCountRange.addEventListener("input", () => (el.qmCountValue.textContent = el.qmCountRange.value));
+    el.qmCountRange.addEventListener("change", () => {
+      storage.set(STORAGE_KEYS.quizCount, el.qmCountRange.value);
+      renderQuizCount();
+    });
+    if (storage.get(QUIZ_MODE_KEY, "") === "1") setQuizMode(true, { silent: true });
+  }
+
 
   // 写真の画面で選ぶ教材（勉強の記録の画面と同じ選び方）
   function renderQuickBooks() {
@@ -3645,7 +3785,7 @@
     renderShortSteps();
     renderProfileSummary();
     renderStats();
-    showTab("home");
+    showTab(homeTab());
   }
 
   // newPage: ページを移ったとき（画面全体をアニメーションさせる）。選択肢を押しただけのときは false
@@ -3861,15 +4001,19 @@
     settings: { node: $("tabSettings"), title: "設定" },
     flow: { node: $("tabFlow"), title: "今日のちょいステップ" },
     onboarding: { node: $("tabOnboarding"), title: "はじめに" },
+    quiz: { node: $("tabQuiz"), title: "問題モード" },
   };
 
   function showTab(name) {
     Object.entries(TABS).forEach(([key, tab]) => tab.node.classList.toggle("hidden", key !== name));
     el.headerTitle.textContent = TABS[name].title;
     // 記録の流れとアンケートの間はタブバーを隠す。記録の流れでは左上に「閉じる」を出す
+    // 問題モードの間はタブバーを出さず、写真 → テストだけに集中できるようにする
     const inFlow = name === "flow";
-    el.tabBar.classList.toggle("hidden", inFlow || name === "onboarding");
+    el.tabBar.classList.toggle("hidden", inFlow || name === "onboarding" || state.quizMode);
     el.flowCloseBtn.classList.toggle("hidden", !inFlow);
+    el.modeToggle.classList.toggle("hidden", inFlow || name === "onboarding");
+    if (name === "quiz") renderQuizHome();
     el.tabBar.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
     if (name === "record") renderRecord();
     window.scrollTo({ top: 0 });
@@ -3883,12 +4027,10 @@
       resetAll();
       showTab("flow");
     });
-    el.flowCloseBtn.addEventListener("click", () => showTab("home"));
-    el.quickBtn.addEventListener("click", startQuick);
-    el.quickAgainBtn.addEventListener("click", startQuick);
+    el.flowCloseBtn.addEventListener("click", () => showTab(homeTab()));
     el.restartBtn.addEventListener("click", () => {
       resetAll();
-      showTab("home");
+      showTab(homeTab());
     });
   }
 
@@ -3915,6 +4057,7 @@
     renderStats();
     showScreen(1);
     showTab("home");
+    initQuizMode(); // 前回が問題モードなら、問題モードのホームから
     // はじめて開いたときはアンケートから
     if (!getProfile().done) openOnboarding();
     initCloud();

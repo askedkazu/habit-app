@@ -23,6 +23,8 @@
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
       <h1 id="headerTitle" class="text-base font-bold flex-1">ホーム</h1>
+      <!-- 問題モードの切り替え（ワンタップ） -->
+      <button id="modeToggle" class="mode-toggle" type="button">📝 問題モード</button>
       <!-- ホーム画面から開いた（ブラウザの再読み込みボタンがない）ときだけ表示 -->
       <button id="reloadBtn" class="hidden icon-btn" aria-label="再読み込み">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -67,8 +69,8 @@
       <button id="startBtn" class="btn-primary btn-cta w-full mt-4">
         今日のちょいステップを始める
       </button>
-      <!-- 問題だけ作るモード（写真 → テストだけ） -->
-      <button id="quickBtn" class="btn-ghost w-full mt-2 py-3 text-sm">📝 問題だけ作る（写真 → テスト）</button>
+      <!-- 問題モードへ（写真 → テストを続けてくり返すモード） -->
+      <button id="quickBtn" class="btn-ghost w-full mt-2 py-3 text-sm">📝 問題モードにする（写真 → テストをくり返す）</button>
 
       <!-- 写真をあとで報告する記録があるとき -->
       <section id="pendingCard" class="hidden card mt-4 flex items-center gap-3">
@@ -366,6 +368,57 @@
     </main>
 
     <!-- =====================================================
+         問題モードのホーム（写真 → テストをすばやくくり返す）
+         ===================================================== -->
+    <main id="tabQuiz" class="tab hidden px-4 pb-10 pt-3">
+      <section class="quiz-hero">
+        <p class="text-sm font-bold opacity-90">今日解いた問題</p>
+        <div class="flex items-end gap-2 mt-1">
+          <span id="qmSolved" class="text-6xl font-extrabold leading-none tabular-nums">0</span>
+          <span class="text-lg font-bold mb-1">問</span>
+        </div>
+        <p id="qmAccuracy" class="text-sm font-bold mt-2 opacity-95">正解率 —</p>
+      </section>
+
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <button id="qmCameraBtn" class="qm-big">
+          <span class="text-4xl">📷</span>
+          <span>撮って問題を作る</span>
+        </button>
+        <button id="qmAlbumBtn" class="qm-big qm-sub">
+          <span class="text-4xl">🖼️</span>
+          <span>アルバムから</span>
+        </button>
+      </div>
+
+      <section class="card mt-4 space-y-4">
+        <div>
+          <p class="field-label">📚 教材（任意）</p>
+          <div id="qmBookList" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="qmCountRange" class="text-sm font-bold text-slate-700">📝 問題の数</label>
+            <span class="text-sm font-bold"><span id="qmCountValue" class="qm-accent text-2xl font-extrabold tabular-nums">3</span> 問</span>
+          </div>
+          <input id="qmCountRange" type="range" min="1" max="10" step="1" value="3" class="quiz-range w-full mt-1" />
+          <div class="flex justify-between text-xs text-slate-400 px-0.5"><span>1問</span><span>10問</span></div>
+        </div>
+        <label class="flex items-center justify-between gap-3 text-sm">
+          <span class="font-bold text-slate-700">撮ったらすぐ問題を作る
+            <span class="block text-xs font-normal text-slate-500">オフにすると、写真を何枚か足してから作れます</span>
+          </span>
+          <input id="qmAutoToggle" type="checkbox" class="w-5 h-5 shrink-0" checked />
+        </label>
+      </section>
+
+      <section class="mt-6">
+        <h2 class="section-title mb-2">最近の結果</h2>
+        <ul id="qmRecent" class="space-y-2"></ul>
+      </section>
+    </main>
+
+    <!-- =====================================================
          はじめてのアンケート（中身は app.js の ONBOARDING_PAGES から作る）
          ===================================================== -->
     <main id="tabOnboarding" class="tab hidden px-4 pb-10 pt-3">
@@ -576,7 +629,8 @@
           <p id="doneMessage" class="text-sm text-slate-500 mt-1"></p>
         </div>
 
-        <button id="quickAgainBtn" class="hidden btn-primary btn-cta w-full mt-5">📝 続けて問題を作る</button>
+        <button id="quickAgainBtn" class="hidden btn-primary btn-cta w-full mt-5">📷 次の写真で問題を作る</button>
+        <button id="sameAgainBtn" class="hidden btn-ghost w-full mt-3 py-3">🔁 同じ写真で別の問題</button>
         <button id="restartBtn" class="btn-primary btn-cta w-full mt-5">ホームに戻る</button>
       </section>
     </main>
