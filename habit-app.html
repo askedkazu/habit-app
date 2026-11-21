@@ -619,6 +619,9 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
 .guide-dots span { width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #e2e8f0; transition: width 0.2s, background 0.2s; }
 .guide-dots span.on { width: 1.4rem; background: var(--primary); }
 
+/* 設定タブの管理者の入口（管理者にだけ出す） */
+.admin-entry { border: 2px solid #fde68a; background: #fffbeb; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
@@ -1175,6 +1178,13 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
           <input id="savePhotosToggle" type="checkbox" class="w-5 h-5 accent-sky-500 shrink-0" checked />
         </label>
         <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
+      </section>
+
+      <!-- 管理者のときだけ表示（Firestore のルールで管理者にしたアカウント） -->
+      <section id="adminCard" class="hidden card admin-entry">
+        <p class="text-sm font-bold">🛠 管理者</p>
+        <p class="text-xs text-slate-500 mt-0.5">証拠写真・利用者・フィードバックを確認できます</p>
+        <a href="admin.html" class="btn-primary block text-center w-full mt-3 py-3 text-sm">管理者ページを開く</a>
       </section>
 
       <!-- 使い方ガイドをもう一度見る -->
@@ -1886,6 +1896,7 @@ window.FIREBASE_VAPID_KEY =
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
     modeToggle: $("modeToggle"),
+    adminCard: $("adminCard"),
     guideModal: $("guideModal"),
     guideSlide: $("guideSlide"),
     guideEmoji: $("guideEmoji"),
@@ -2525,6 +2536,7 @@ window.FIREBASE_VAPID_KEY =
           await pullFromCloud();
           watchUserDoc();
         }
+        checkAdmin(user);
         renderNotifyUI();
         renderCalendar();
       });
@@ -2568,6 +2580,21 @@ window.FIREBASE_VAPID_KEY =
           : authErrorMessage(err);
       setAccountUI(null, msg);
       showAuthMsg(msg);
+    }
+  }
+
+  /* ---------- 管理者かどうか（設定タブに管理者ページへの入口を出す） ---------- */
+  // 管理者は Firestore のルール（isAdmin()）で決めているので、管理者しか読めない証拠写真を
+  // 1件だけ読んでみて、読めたら管理者とみなす（ルールの管理者を変えれば、入口が出る人も変わる）
+  async function checkAdmin(user) {
+    el.adminCard.classList.add("hidden");
+    if (!user) return;
+    try {
+      const { collection, getDocs, query, limit } = cloud.fsMod;
+      await getDocs(query(collection(cloud.db, "photos"), limit(1)));
+      if (cloud.user?.uid === user.uid) el.adminCard.classList.remove("hidden");
+    } catch {
+      /* 権限がない＝管理者ではない */
     }
   }
 

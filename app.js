@@ -198,6 +198,7 @@
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
     modeToggle: $("modeToggle"),
+    adminCard: $("adminCard"),
     guideModal: $("guideModal"),
     guideSlide: $("guideSlide"),
     guideEmoji: $("guideEmoji"),
@@ -837,6 +838,7 @@
           await pullFromCloud();
           watchUserDoc();
         }
+        checkAdmin(user);
         renderNotifyUI();
         renderCalendar();
       });
@@ -880,6 +882,21 @@
           : authErrorMessage(err);
       setAccountUI(null, msg);
       showAuthMsg(msg);
+    }
+  }
+
+  /* ---------- 管理者かどうか（設定タブに管理者ページへの入口を出す） ---------- */
+  // 管理者は Firestore のルール（isAdmin()）で決めているので、管理者しか読めない証拠写真を
+  // 1件だけ読んでみて、読めたら管理者とみなす（ルールの管理者を変えれば、入口が出る人も変わる）
+  async function checkAdmin(user) {
+    el.adminCard.classList.add("hidden");
+    if (!user) return;
+    try {
+      const { collection, getDocs, query, limit } = cloud.fsMod;
+      await getDocs(query(collection(cloud.db, "photos"), limit(1)));
+      if (cloud.user?.uid === user.uid) el.adminCard.classList.remove("hidden");
+    } catch {
+      /* 権限がない＝管理者ではない */
     }
   }
 

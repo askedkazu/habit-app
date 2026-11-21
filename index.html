@@ -364,6 +364,13 @@
         <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
       </section>
 
+      <!-- 管理者のときだけ表示（Firestore のルールで管理者にしたアカウント） -->
+      <section id="adminCard" class="hidden card admin-entry">
+        <p class="text-sm font-bold">🛠 管理者</p>
+        <p class="text-xs text-slate-500 mt-0.5">証拠写真・利用者・フィードバックを確認できます</p>
+        <a href="admin.html" class="btn-primary block text-center w-full mt-3 py-3 text-sm">管理者ページを開く</a>
+      </section>
+
       <!-- 使い方ガイドをもう一度見る -->
       <button id="guideOpenBtn" class="btn-ghost w-full text-sm py-3">📖 使い方ガイドを見る</button>
 

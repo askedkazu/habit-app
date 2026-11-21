@@ -604,6 +604,9 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
 .guide-dots span { width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #e2e8f0; transition: width 0.2s, background 0.2s; }
 .guide-dots span.on { width: 1.4rem; background: var(--primary); }
 
+/* 設定タブの管理者の入口（管理者にだけ出す） */
+.admin-entry { border: 2px solid #fde68a; background: #fffbeb; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
