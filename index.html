@@ -364,6 +364,9 @@
         <button type="button" class="privacy-link btn-ghost w-full mt-3 text-sm">プライバシーと利用状況について</button>
       </section>
 
+      <!-- 使い方ガイドをもう一度見る -->
+      <button id="guideOpenBtn" class="btn-ghost w-full text-sm py-3">📖 使い方ガイドを見る</button>
+
       <!-- フィードバック（管理者に届く） -->
       <section class="card">
         <p class="text-sm font-bold">💬 フィードバック</p>
@@ -799,6 +802,24 @@
       <button id="focusStopBtn" type="button" class="focus-stop">■ 止めて記録する</button>
       <button id="focusMinBtn" type="button" class="focus-min">画面を戻す（タイマーは続きます）</button>
     </div>
+  </div>
+
+  <!-- 使い方ガイド（はじめて使うとき・設定から） -->
+  <div id="guideModal" class="hidden guide-backdrop" role="dialog" aria-label="使い方ガイド">
+    <section class="guide-card">
+      <button id="guideSkipBtn" class="guide-skip" type="button">スキップ</button>
+      <div id="guideSlide" class="guide-slide">
+        <div id="guideEmoji" class="guide-emoji"></div>
+        <h2 id="guideTitle" class="guide-title"></h2>
+        <p id="guideText" class="guide-text"></p>
+        <ul id="guidePoints" class="guide-points"></ul>
+      </div>
+      <div id="guideDots" class="guide-dots"></div>
+      <div class="flex gap-2 mt-4">
+        <button id="guideBackBtn" class="btn-ghost px-5" type="button">戻る</button>
+        <button id="guideNextBtn" class="btn-primary flex-1 py-3" type="button">次へ</button>
+      </div>
+    </section>
   </div>
 
   <!-- 問題モードの切り替え演出（ワイプ） -->

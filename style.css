@@ -556,6 +556,54 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
   to { clip-path: polygon(120% 0, 120% 0, 100% 100%, 100% 100%); }
 }
 
+/* 使い方ガイド（スワイプでめくるカード） */
+.guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+  animation: fadeIn 0.2s ease-out;
+}
+.guide-card {
+  position: relative;
+  width: 100%;
+  max-width: 24rem;
+  border-radius: 1.5rem;
+  padding: 1.5rem 1.25rem 1.25rem;
+  background: #fff;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  animation: riseUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.guide-skip { position: absolute; top: 0.9rem; right: 1rem; font-size: 0.8rem; font-weight: 700; color: #94a3b8; }
+.guide-slide { min-height: 19rem; display: flex; flex-direction: column; align-items: center; text-align: center; touch-action: pan-y; }
+.guide-emoji {
+  width: 5.5rem;
+  height: 5.5rem;
+  margin-top: 0.75rem;
+  border-radius: 1.75rem;
+  display: grid;
+  place-items: center;
+  font-size: 2.8rem;
+  background: var(--primary-soft);
+}
+.guide-title { margin-top: 1rem; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
+.guide-text { margin-top: 0.5rem; font-size: 0.9rem; color: #475569; line-height: 1.6; }
+.guide-points { margin-top: 0.9rem; display: grid; gap: 0.45rem; width: 100%; text-align: left; }
+.guide-points li {
+  font-size: 0.85rem;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.75rem;
+}
+.guide-dots { display: flex; justify-content: center; gap: 0.4rem; margin-top: 1rem; }
+.guide-dots span { width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #e2e8f0; transition: width 0.2s, background 0.2s; }
+.guide-dots span.on { width: 1.4rem; background: var(--primary); }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;

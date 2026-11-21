@@ -198,6 +198,17 @@
     quickAgainBtn: $("quickAgainBtn"),
     photoTitle: $("photoTitle"),
     modeToggle: $("modeToggle"),
+    guideModal: $("guideModal"),
+    guideSlide: $("guideSlide"),
+    guideEmoji: $("guideEmoji"),
+    guideTitle: $("guideTitle"),
+    guideText: $("guideText"),
+    guidePoints: $("guidePoints"),
+    guideDots: $("guideDots"),
+    guideBackBtn: $("guideBackBtn"),
+    guideNextBtn: $("guideNextBtn"),
+    guideSkipBtn: $("guideSkipBtn"),
+    guideOpenBtn: $("guideOpenBtn"),
     feedbackKinds: $("feedbackKinds"),
     feedbackText: $("feedbackText"),
     feedbackCount: $("feedbackCount"),
@@ -548,6 +559,123 @@
   function setAnalyticsEnabled(enabled) {
     writeLocal(ANALYTICS_OPTOUT_KEY, enabled ? null : "1");
     if (analytics.instance) analytics.mod.setAnalyticsCollectionEnabled(analytics.instance, enabled);
+  }
+
+  /* ---------- 使い方ガイド ---------- */
+  // はじめて使うとき（アンケートのあと）に1回だけ出す。設定タブからいつでも見直せる。
+  // 見たかどうかはアンケートの答えと一緒に保存する（profile.guideSeen。アカウントにも同期）
+  const GUIDE_SLIDES = [
+    {
+      emoji: "👋",
+      title: "ようこそ！",
+      text: "「ちょいステップ習慣」は、毎日の“ちょっとだけ”を続けるためのアプリです。",
+      points: ["小さく始めて", "写真で証明して", "AIのテストで確認する"],
+    },
+    {
+      emoji: "✅",
+      title: "まずは、ちょいステップ",
+      text: "ホームの「今日のちょいステップを始める」から。やる気がない日も大丈夫。",
+      points: ["「机に座った」1つだけでもOK", "チェックできたら、それが今日の一歩"],
+    },
+    {
+      emoji: "⏱",
+      title: "勉強した時間を記録",
+      text: "教材を選んで、時間を入れるだけ。",
+      points: ["タイマーを押すと集中モードに", "アプリを閉じても計り続けます"],
+    },
+    {
+      emoji: "📷",
+      title: "写真を撮ると、AIがテストに",
+      text: "開いた教科書やノートを撮ると、その内容から確認テストを作ります。",
+      points: ["問題の数は1〜10問で選べる", "手元にないときは「写真なしで記録（あとで報告）」"],
+    },
+    {
+      emoji: "📝",
+      title: "問題だけ解きたいときは",
+      text: "画面上の「📝 問題モード」をタップ。撮る → 解く をすばやくくり返せます。",
+      points: ["「同じ写真で別の問題」で復習も", "もう一度押すと通常に戻ります"],
+    },
+    {
+      emoji: "🔥",
+      title: "続けるコツ",
+      text: "毎日1つでもできたら、連続記録が伸びていきます。",
+      points: ["連続日数やバッジは「記録」タブで", "設定タブでリマインド通知をオンに"],
+    },
+  ];
+  let guidePage = 0;
+
+  function guideSlides() {
+    const slides = GUIDE_SLIDES.map((sl) => ({ ...sl, points: [...sl.points] }));
+    // iPhone の Safari で開いている人には、通知を使うためのホーム画面への追加を案内する
+    if (isIOS() && !isStandalone()) {
+      slides[slides.length - 1].points.push("Safariの共有ボタン →「ホーム画面に追加」すると通知を受け取れます");
+    }
+    return slides;
+  }
+
+  function openGuide() {
+    guidePage = 0;
+    el.guideModal.classList.remove("hidden");
+    renderGuide();
+  }
+
+  function closeGuide() {
+    el.guideModal.classList.add("hidden");
+    const profile = getProfile();
+    if (!profile.guideSeen) storage.setJSON(STORAGE_KEYS.profile, { ...profile, guideSeen: true });
+  }
+
+  function renderGuide(direction) {
+    const slides = guideSlides();
+    const sl = slides[guidePage];
+    el.guideEmoji.textContent = sl.emoji;
+    el.guideTitle.textContent = sl.title;
+    el.guideText.textContent = sl.text;
+    el.guidePoints.innerHTML = "";
+    sl.points.forEach((point) => {
+      const li = document.createElement("li");
+      li.textContent = point;
+      el.guidePoints.append(li);
+    });
+    el.guideDots.innerHTML = "";
+    slides.forEach((_, i) => {
+      const dot = document.createElement("span");
+      if (i === guidePage) dot.className = "on";
+      el.guideDots.append(dot);
+    });
+    const last = guidePage === slides.length - 1;
+    el.guideBackBtn.classList.toggle("hidden", guidePage === 0);
+    el.guideNextBtn.textContent = last ? "はじめる！" : "次へ";
+    el.guideSkipBtn.classList.toggle("invisible", last);
+    if (direction) animateIn(el.guideSlide, direction === "next" ? "anim-right" : "anim-left");
+  }
+
+  function moveGuide(step) {
+    const count = guideSlides().length;
+    const next = guidePage + step;
+    if (next >= count) return closeGuide();
+    if (next < 0) return;
+    guidePage = next;
+    renderGuide(step > 0 ? "next" : "back");
+  }
+
+  function initGuide() {
+    el.guideNextBtn.addEventListener("click", () => moveGuide(1));
+    el.guideBackBtn.addEventListener("click", () => moveGuide(-1));
+    el.guideSkipBtn.addEventListener("click", () => {
+      track("guide_skip", { page: guidePage + 1 });
+      closeGuide();
+    });
+    el.guideOpenBtn.addEventListener("click", openGuide);
+    // 指で左右にスワイプしてもめくれる
+    let startX = null;
+    el.guideSlide.addEventListener("touchstart", (e) => (startX = e.touches[0].clientX), { passive: true });
+    el.guideSlide.addEventListener("touchend", (e) => {
+      if (startX === null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      startX = null;
+      if (Math.abs(dx) > 50) moveGuide(dx < 0 ? 1 : -1);
+    });
   }
 
   /* ---------- フィードバック（設定タブの一番下） ---------- */
@@ -923,7 +1051,11 @@
         if (d.quizCount) writeLocal(STORAGE_KEYS.quizCount, String(d.quizCount));
         if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
-        if (d.profile) writeLocal(STORAGE_KEYS.profile, JSON.stringify(d.profile));
+        if (d.profile) {
+          // この端末で使い方ガイドを見ていたら、アカウントの答えで上書きしても見たことにしておく
+          const seenHere = getProfile().guideSeen;
+          writeLocal(STORAGE_KEYS.profile, JSON.stringify(seenHere ? { ...d.profile, guideSeen: true } : d.profile));
+        }
         writeLocal(STORAGE_KEYS.history, JSON.stringify(d.history || []));
         writeLocal(STORAGE_KEYS.logs, JSON.stringify(sortLogs(d.logs || [])));
         cloud.notifyTime = d.notifyTime || null;
@@ -3904,6 +4036,8 @@
     renderProfileSummary();
     renderStats();
     showTab(homeTab());
+    // はじめてのアンケートのあとは、使い方ガイドへ
+    if (!onboarding.editing && !getProfile().guideSeen) openGuide();
   }
 
   // newPage: ページを移ったとき（画面全体をアニメーションさせる）。選択肢を押しただけのときは false
@@ -4182,6 +4316,7 @@
     initOnboarding();
     initPrivacy();
     initFeedback();
+    initGuide();
     initFocus();
     initTabs();
     if (isStandalone()) {
@@ -4193,8 +4328,9 @@
     showScreen(1);
     showTab("home");
     initQuizMode(); // 前回が問題モードなら、問題モードのホームから
-    // はじめて開いたときはアンケートから
+    // はじめて開いたときはアンケートから。アンケートは済んでいてガイドを見ていなければ、ガイドから
     if (!getProfile().done) openOnboarding();
+    else if (!getProfile().guideSeen) openGuide();
     initCloud();
   }
 
