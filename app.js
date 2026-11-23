@@ -35,6 +35,12 @@
   // タイマーの開始時刻（端末ごとの値なのでアカウントには同期しない）
   const TIMER_KEY = "habitApp.timerStart";
   const TIMER_BOOK_KEY = "habitApp.timerBook"; // タイマー中の教材（アプリを開き直したときに集中モードに出す）
+  // スマホ断ち（端末ごとの値なのでアカウントには同期しない）
+  const DETOX_KEY = "habitApp.detox"; // "1" ならタイマーをスマホ断ちで始める
+  const DETOX_TARGET_KEY = "habitApp.detoxTarget"; // 目標の分数（0 なら止めるまで）
+  const DETOX_STATE_KEY = "habitApp.detoxState"; // スマホ断ち中の記録（アプリを開き直しても続ける）
+  const DETOX_GRACE_MS = 10_000; // 持ち上げてもこの時間内に伏せ直せばセーフ
+  const DETOX_AWAY_MIN_MS = 3_000; // これより短くアプリを離れたのは数えない
   // 問題モード（端末ごとの値なのでアカウントには同期しない）
   const QUIZ_MODE_KEY = "habitApp.quizMode"; // "1" なら問題モード
   const QM_AUTO_KEY = "habitApp.qmAuto"; // "0" なら、写真を撮ってもすぐには問題を作らない
@@ -234,6 +240,20 @@
     focusStopBtn: $("focusStopBtn"),
     focusMinBtn: $("focusMinBtn"),
     focusEnterBtn: $("focusEnterBtn"),
+    detoxBox: $("detoxBox"),
+    detoxToggle: $("detoxToggle"),
+    detoxTargets: $("detoxTargets"),
+    detoxPanel: $("detoxPanel"),
+    detoxStatus: $("detoxStatus"),
+    detoxCounts: $("detoxCounts"),
+    detoxSensorBtn: $("detoxSensorBtn"),
+    detoxResult: $("detoxResult"),
+    detoxResultTitle: $("detoxResultTitle"),
+    detoxResultTime: $("detoxResultTime"),
+    detoxResultTouches: $("detoxResultTouches"),
+    detoxResultAway: $("detoxResultAway"),
+    detoxResultMsg: $("detoxResultMsg"),
+    detoxResultOk: $("detoxResultOk"),
     quizCountRange: $("quizCountRange"),
     quizCountValue: $("quizCountValue"),
     quizCountInline: $("quizCountInline"),
@@ -385,6 +405,7 @@
     quizMode: false,    // 問題モード（アプリ全体を、写真 → テストをくり返す専用にする）
     avoidQuestions: [], // 「同じ写真で別の問題」のとき、前に出した問題（同じ問題を避ける）
     photosSaved: false, // 今の写真を、管理者用にもう保存したか（同じ写真で作り直したとき二重に保存しない）
+    detoxResult: null,  // 終わったスマホ断ちの結果（次に記録を残すとき一緒に保存する）
     photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
@@ -2236,6 +2257,7 @@
       sub.className = "text-xs text-slate-500";
       const parts = [];
       if (log.mode === "quiz") parts.push("📝 問題だけ");
+      if (log.detox) parts.push(`📵 触った${log.detox.touches}回`);
       if (log.book) parts.push(`📚 ${log.book}`);
       if (log.minutes) parts.push(`⏱ ${formatMinutes(log.minutes)}`);
       if (log.steps && !log.book && !log.minutes) parts.push(`ステップ ${log.steps}個`);
@@ -3282,8 +3304,10 @@
       book: state.studyBook || "",
       minutes: state.studyMinutes || 0,
       ...(state.quickMode ? { mode: "quiz" } : {}),
+      ...(state.detoxResult ? { detox: state.detoxResult } : {}),
       ...log,
     });
+    state.detoxResult = null;
     recordAchievement();
     renderStats();
 
@@ -3740,6 +3764,7 @@
       ? "計測中…止めると「記録する時間」に足されます"
       : "タップでスタート。アプリを閉じても計り続けます";
     el.focusEnterBtn.classList.toggle("hidden", !started || isFocusOpen());
+    renderDetoxSettings();
     if (started && isFocusOpen()) renderFocus(started);
   }
 
@@ -3753,14 +3778,250 @@
       clearInterval(timerTick);
       closeFocus();
       setStudyMinutes(state.studyMinutes + minutes);
+      if (detox.active) endDetox(started); // スマホ断ちの結果を出す
     } else {
       writeLocal(TIMER_KEY, String(Date.now()));
       writeLocal(TIMER_BOOK_KEY, state.studyBook || null);
       timerTick = setInterval(renderTimer, 1000);
       track("focus_start", { has_book: state.studyBook ? 1 : 0 });
+      if (detoxEnabled()) startDetox(); // ボタンを押した流れでセンサーの許可を取るため、先に始める
       openFocus(); // タイマーを始めたら、ほかの表示を消して集中できる画面にする
     }
     renderTimer();
+  }
+
+  /* ---------- スマホ断ち ----------
+   * タイマーをスマホ断ちで始めると、集中モードが「スマホを伏せて置く」仕様になる。
+   * - 傾きセンサーで伏せたかを見る。持ち上げても止めず、10秒以内に伏せ直せばセーフ、過ぎたら「触った回数」に数える
+   * - アプリから離れた（ほかのアプリを開いた）時間は「よそ見」として数える
+   * - 目標の分数を決めたときは残り時間を出し、0になったら自動で止めて結果を出す
+   * ブラウザのアプリなので、ほかのアプリや通知を止めることはできない */
+  const detox = {
+    active: false,
+    target: 0, // 目標の分数（0 なら止めるまで）
+    touches: 0, // 触った回数
+    awayMs: 0, // よそ見した合計時間
+    hiddenAt: 0, // アプリを離れた時刻（戻ってきたら差を足す）
+    sensor: "unknown", // "on" | "off" | "needs"（iPhone で許可がまだ）| "unknown"
+    faceDown: false,
+    everFaceDown: false,
+    liftedAt: 0,
+    liftCounted: false,
+    notice: "", // 戻ってきたときの「◯分よそ見していました」など
+    noticeUntil: 0,
+  };
+
+  function detoxEnabled() {
+    return storage.get(DETOX_KEY, "") === "1";
+  }
+
+  function detoxTarget() {
+    const n = Number(storage.get(DETOX_TARGET_KEY, "0"));
+    return [0, 15, 25, 45, 60].includes(n) ? n : 0;
+  }
+
+  function saveDetoxState() {
+    const { active, target, touches, awayMs, hiddenAt } = detox;
+    writeLocal(DETOX_STATE_KEY, active ? JSON.stringify({ active, target, touches, awayMs, hiddenAt }) : null);
+  }
+
+  function startDetox() {
+    Object.assign(detox, {
+      active: true,
+      target: detoxTarget(),
+      touches: 0,
+      awayMs: 0,
+      hiddenAt: 0,
+      sensor: "unknown",
+      faceDown: false,
+      everFaceDown: false,
+      liftedAt: 0,
+      liftCounted: false,
+      notice: "",
+    });
+    saveDetoxState();
+    track("detox_start", { target: detox.target });
+    enableSensor();
+  }
+
+  // 傾きセンサーを使えるようにする。iPhone は許可が必要（タップの流れの中でしか聞けない）
+  async function enableSensor() {
+    const DOE = window.DeviceOrientationEvent;
+    if (!DOE) {
+      detox.sensor = "off";
+      return renderDetox();
+    }
+    if (typeof DOE.requestPermission === "function") {
+      try {
+        const result = await DOE.requestPermission();
+        if (result !== "granted") {
+          detox.sensor = "off";
+          return renderDetox();
+        }
+      } catch {
+        detox.sensor = "needs"; // タップの流れの外で呼んだ（アプリを開き直したときなど）
+        return renderDetox();
+      }
+    }
+    window.removeEventListener("deviceorientation", onOrientation);
+    window.addEventListener("deviceorientation", onOrientation);
+    // 少し待っても値が来なければ、センサーのない端末（パソコンなど）
+    setTimeout(() => {
+      if (detox.sensor === "unknown") {
+        detox.sensor = "off";
+        renderDetox();
+      }
+    }, 2500);
+    renderDetox();
+  }
+
+  function onOrientation(e) {
+    if (!detox.active || e.beta == null) return;
+    detox.sensor = "on";
+    // 画面を下にして平らに置くと、beta が ±180 に近くなる
+    const down = Math.abs(e.beta) > 150 && Math.abs(e.gamma ?? 0) < 35;
+    if (down === detox.faceDown) return;
+    detox.faceDown = down;
+    if (down) {
+      detox.everFaceDown = true;
+      detox.liftedAt = 0;
+    } else if (detox.everFaceDown) {
+      detox.liftedAt = Date.now();
+      detox.liftCounted = false;
+    }
+    renderDetox();
+  }
+
+  // 1秒ごと：持ち上げてから10秒たったら、触った回数に数える
+  function tickDetox() {
+    if (!detox.active) return;
+    if (detox.liftedAt && !detox.liftCounted && Date.now() - detox.liftedAt > DETOX_GRACE_MS) {
+      detox.touches++;
+      detox.liftCounted = true;
+      saveDetoxState();
+    }
+    renderDetox();
+  }
+
+  // アプリを離れた・戻ってきた
+  function onDetoxVisibility() {
+    if (!detox.active) return;
+    if (document.visibilityState === "hidden") {
+      detox.hiddenAt = Date.now();
+    } else if (detox.hiddenAt) {
+      const away = Date.now() - detox.hiddenAt;
+      detox.hiddenAt = 0;
+      if (away >= DETOX_AWAY_MIN_MS) {
+        detox.awayMs += away;
+        detox.notice = `👀 ${Math.max(1, Math.round(away / 60000))}分よそ見していました`;
+        detox.noticeUntil = Date.now() + 5000;
+      }
+    }
+    saveDetoxState();
+    renderDetox();
+  }
+
+  function renderDetox() {
+    const on = detox.active && isFocusOpen();
+    el.detoxPanel.classList.toggle("hidden", !on);
+    el.focusOverlay.classList.toggle("face-down", on && detox.faceDown);
+    if (!on) return;
+    let text;
+    let tone = "";
+    if (detox.notice && Date.now() < detox.noticeUntil) {
+      text = detox.notice;
+      tone = "warn";
+    } else if (detox.sensor === "needs") {
+      text = "伏せたのを検知するには、下のボタンを押してね";
+    } else if (detox.sensor === "off") {
+      text = "📵 スマホは置いて集中（アプリから離れた時間を記録します）";
+    } else if (detox.liftedAt) {
+      const left = Math.ceil((DETOX_GRACE_MS - (Date.now() - detox.liftedAt)) / 1000);
+      text = detox.liftCounted ? "触った回数に数えました。伏せて戻そう" : `持ち上げ中… あと${Math.max(0, left)}秒で伏せて戻してね`;
+      tone = "warn";
+    } else if (detox.faceDown) {
+      text = "📵 伏せてOK。そのまま集中！";
+      tone = "ok";
+    } else {
+      text = "スマホを画面を下にして置いてね";
+    }
+    el.detoxStatus.textContent = text;
+    el.detoxStatus.className = `detox-status ${tone}`;
+    el.detoxCounts.textContent = `触った ${detox.touches}回 ・ よそ見 ${Math.round(detox.awayMs / 60000)}分`;
+    el.detoxSensorBtn.classList.toggle("hidden", detox.sensor !== "needs");
+  }
+
+  // タイマーを止めたとき：結果を出し、次に残す記録に付ける
+  function endDetox(started) {
+    const sec = Math.floor((Date.now() - started) / 1000);
+    const minutes = Math.round(sec / 60);
+    const reached = detox.target > 0 && sec >= detox.target * 60 - 5;
+    const awayMin = Math.round(detox.awayMs / 60000);
+    window.removeEventListener("deviceorientation", onOrientation);
+    track("detox_end", { minutes, touches: detox.touches, away_min: awayMin, target: detox.target, reached: reached ? 1 : 0 });
+    state.detoxResult = { minutes, touches: detox.touches, awayMin, target: detox.target, reached };
+
+    el.detoxResultTitle.textContent = reached
+      ? `🎉 ${detox.target}分 スマホ断ち達成！`
+      : "スマホ断ち おつかれさま";
+    el.detoxResultTime.textContent = formatElapsed(sec);
+    el.detoxResultTouches.textContent = detox.touches;
+    el.detoxResultAway.textContent = awayMin;
+    el.detoxResultMsg.textContent =
+      detox.touches === 0 && awayMin === 0
+        ? "一度も触らなかった！すごい集中力 💯"
+        : "次は「触った 0回」をめざそう";
+    el.detoxResult.classList.remove("hidden");
+
+    detox.active = false;
+    saveDetoxState();
+    renderDetox();
+  }
+
+  // 目標の時間になったら、自動で止める
+  function checkDetoxTarget(started) {
+    if (!detox.active || !detox.target) return;
+    if (Date.now() - started >= detox.target * 60000) {
+      ensureStudyScreen();
+      toggleTimer();
+    }
+  }
+
+  function renderDetoxSettings() {
+    const on = detoxEnabled();
+    el.detoxToggle.checked = on;
+    el.detoxTargets.classList.toggle("hidden", !on);
+    const target = detoxTarget();
+    el.detoxTargets.querySelectorAll("[data-target]").forEach((b) =>
+      b.classList.toggle("selected", Number(b.dataset.target) === target)
+    );
+    el.detoxBox.classList.toggle("hidden", !!timerStartedAt()); // 計測中は変えられない
+  }
+
+  function initDetox() {
+    el.detoxToggle.addEventListener("change", () => {
+      writeLocal(DETOX_KEY, el.detoxToggle.checked ? "1" : null);
+      renderDetoxSettings();
+    });
+    el.detoxTargets.querySelectorAll("[data-target]").forEach((b) =>
+      b.addEventListener("click", () => {
+        writeLocal(DETOX_TARGET_KEY, b.dataset.target);
+        renderDetoxSettings();
+      })
+    );
+    el.detoxSensorBtn.addEventListener("click", enableSensor);
+    el.detoxResultOk.addEventListener("click", () => el.detoxResult.classList.add("hidden"));
+    document.addEventListener("visibilitychange", onDetoxVisibility);
+    // スマホ断ちの途中でアプリを開き直したら、続きから（離れていた時間はよそ見に数える）
+    const saved = storage.getJSON(DETOX_STATE_KEY, null);
+    if (saved?.active && timerStartedAt()) {
+      Object.assign(detox, saved, { sensor: "unknown", faceDown: false, everFaceDown: false, liftedAt: 0 });
+      onDetoxVisibility();
+      enableSensor();
+    } else if (saved?.active) {
+      writeLocal(DETOX_STATE_KEY, null);
+    }
+    renderDetoxSettings();
   }
 
   /* ---------- 集中モード（タイマー中の全画面表示） ---------- */
@@ -3783,12 +4044,17 @@
   function renderFocus(started = timerStartedAt()) {
     if (!started) return;
     const sec = Math.floor((Date.now() - started) / 1000);
-    el.focusClock.textContent = formatElapsed(sec);
-    el.focusMsg.textContent = focusMessage(Math.floor(sec / 60));
+    // スマホ断ちで目標の分数を決めたときは、残り時間を出す
+    const countdown = detox.active && detox.target;
+    el.focusClock.textContent = countdown ? formatElapsed(Math.max(0, detox.target * 60 - sec)) : formatElapsed(sec);
+    el.focusMsg.textContent = countdown ? `目標 ${detox.target}分（${formatElapsed(sec)} 経過）` : focusMessage(Math.floor(sec / 60));
+    tickDetox();
+    checkDetoxTarget(started);
   }
 
   function openFocus() {
     el.focusBook.textContent = state.studyBook ? `📚 ${state.studyBook}` : "";
+    document.querySelector(".focus-label").textContent = detox.active ? "スマホ断ち" : "集中モード";
     el.focusOverlay.classList.remove("hidden");
     renderFocus();
     el.focusEnterBtn.classList.add("hidden");
@@ -3797,6 +4063,7 @@
 
   function closeFocus() {
     el.focusOverlay.classList.add("hidden");
+    el.focusOverlay.classList.remove("face-down");
     releaseScreen();
   }
 
@@ -4334,6 +4601,7 @@
     initPrivacy();
     initFeedback();
     initGuide();
+    initDetox();
     initFocus();
     initTabs();
     if (isStandalone()) {

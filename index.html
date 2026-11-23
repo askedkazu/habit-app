@@ -521,6 +521,22 @@
           </button>
           <p id="timerHint" class="timer-hint">タップでスタート。アプリを閉じても計り続けます</p>
           <button id="focusEnterBtn" type="button" class="hidden text-xs font-bold text-orange-700 underline">⛶ 集中モードに戻る</button>
+          <!-- スマホ断ち（オンでタイマーを始めると、集中モードがスマホ断ち仕様になる） -->
+          <div id="detoxBox" class="detox-box">
+            <label class="flex items-center justify-between gap-3">
+              <span class="text-sm font-bold text-slate-700">📵 スマホ断ち
+                <span class="block text-xs font-normal text-slate-500">スマホを伏せて置き、触った回数を数えます</span>
+              </span>
+              <input id="detoxToggle" type="checkbox" class="w-5 h-5 shrink-0" />
+            </label>
+            <div id="detoxTargets" class="hidden flex flex-wrap gap-2 mt-2">
+              <button type="button" class="book-chip" data-target="0">止めるまで</button>
+              <button type="button" class="book-chip" data-target="15">15分</button>
+              <button type="button" class="book-chip" data-target="25">25分</button>
+              <button type="button" class="book-chip" data-target="45">45分</button>
+              <button type="button" class="book-chip" data-target="60">60分</button>
+            </div>
+          </div>
         </div>
 
         <!-- 記録する時間（タイマーを止めると足される。手で直してもOK） -->
@@ -805,6 +821,12 @@
     <p id="focusBook" class="focus-book"></p>
     <p id="focusClock" class="focus-clock">00:00</p>
     <p id="focusMsg" class="focus-msg"></p>
+    <!-- スマホ断ちのときだけ：伏せているか・触った回数・よそ見した時間 -->
+    <div id="detoxPanel" class="hidden detox-panel">
+      <p id="detoxStatus" class="detox-status"></p>
+      <p id="detoxCounts" class="detox-counts"></p>
+      <button id="detoxSensorBtn" type="button" class="hidden detox-sensor-btn">📱 伏せたのを検知する（センサーをオン）</button>
+    </div>
     <div class="focus-actions">
       <button id="focusStopBtn" type="button" class="focus-stop">■ 止めて記録する</button>
       <button id="focusMinBtn" type="button" class="focus-min">画面を戻す（タイマーは続きます）</button>
@@ -826,6 +848,21 @@
         <button id="guideBackBtn" class="btn-ghost px-5" type="button">戻る</button>
         <button id="guideNextBtn" class="btn-primary flex-1 py-3" type="button">次へ</button>
       </div>
+    </section>
+  </div>
+
+  <!-- スマホ断ちの結果 -->
+  <div id="detoxResult" class="hidden modal-backdrop" style="align-items:center">
+    <section class="modal-sheet text-center" style="border-radius:1.25rem;max-width:22rem">
+      <div class="text-5xl">📵</div>
+      <h2 id="detoxResultTitle" class="text-xl font-extrabold mt-2"></h2>
+      <p id="detoxResultTime" class="text-4xl font-extrabold tabular-nums mt-2"></p>
+      <div class="grid grid-cols-2 gap-2 mt-4">
+        <div class="stat-card"><p class="stat-label">触った回数</p><p class="stat-value"><span id="detoxResultTouches">0</span><small>回</small></p></div>
+        <div class="stat-card"><p class="stat-label">よそ見</p><p class="stat-value"><span id="detoxResultAway">0</span><small>分</small></p></div>
+      </div>
+      <p id="detoxResultMsg" class="text-sm text-slate-500 mt-3"></p>
+      <button id="detoxResultOk" class="btn-primary w-full py-3 mt-4">OK</button>
     </section>
   </div>
 

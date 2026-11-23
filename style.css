@@ -607,6 +607,19 @@ body.quiz-mode #doneScore { font-size: 2rem; font-weight: 800; color: #4c1d95; }
 /* 設定タブの管理者の入口（管理者にだけ出す） */
 .admin-entry { border: 2px solid #fde68a; background: #fffbeb; }
 
+/* スマホ断ち */
+.detox-box { width: 100%; margin-top: 0.4rem; padding: 0.7rem 0.8rem; border-radius: 0.8rem; background: rgba(255, 255, 255, 0.7); }
+#detoxToggle { accent-color: #0f172a; }
+.detox-panel { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; margin-top: 0.5rem; }
+.detox-status { font-size: 1rem; font-weight: 800; color: #e2e8f0; }
+.detox-status.warn { color: #fca5a5; }
+.detox-status.ok { color: #86efac; }
+.detox-counts { font-size: 0.8rem; font-weight: 700; color: #64748b; }
+.detox-sensor-btn { font-size: 0.8rem; font-weight: 800; color: #0b1120; background: #e2e8f0; border-radius: 9999px; padding: 0.5rem 1rem; }
+/* 伏せている間は、画面をできるだけ暗くして電池の減りを抑える */
+.focus-overlay.face-down { background: #000; }
+.focus-overlay.face-down > * { opacity: 0.25; }
+
 /* 写真の枠 */
 .photo-drop {
   position: relative;
