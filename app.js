@@ -29,6 +29,7 @@
     plans: "habitApp.plans", // アプリ内の勉強の予定 [{ id, date, time, minutes, book }]
     savePhotos: "habitApp.savePhotos", // "0" なら証拠写真を保存しない（未設定・"1" なら保存する）
     quizCount: "habitApp.quizCount", // 確認テストの問題の数（1〜10）
+    quizLevel: "habitApp.quizLevel", // 問題のレベル（check / understand / apply）
   };
   // 利用状況（アナリティクス）を送らない設定（端末ごとの値なのでアカウントには同期しない）
   const ANALYTICS_OPTOUT_KEY = "habitApp.analyticsOptOut";
@@ -258,6 +259,8 @@
     quizCountValue: $("quizCountValue"),
     quizCountInline: $("quizCountInline"),
     quizCountHint: $("quizCountHint"),
+    similarBtn: $("similarBtn"),
+    similarError: $("similarError"),
     analyticsToggle: $("analyticsToggle"),
     savePhotosRow: $("savePhotosRow"),
     savePhotosToggle: $("savePhotosToggle"),
@@ -406,6 +409,7 @@
     avoidQuestions: [], // 「同じ写真で別の問題」のとき、前に出した問題（同じ問題を避ける）
     photosSaved: false, // 今の写真を、管理者用にもう保存したか（同じ写真で作り直したとき二重に保存しない）
     detoxResult: null,  // 終わったスマホ断ちの結果（次に記録を残すとき一緒に保存する）
+    similarMode: false, // 今解いているのが類題のテストか
     photoThumbs: null,  // 保存用に小さく縮めた証拠写真（テストを解き終えたら保存する）
   };
 
@@ -1087,6 +1091,7 @@
         writeLocal(STORAGE_KEYS.books, JSON.stringify(d.books || []));
         if (d.savePhotos !== undefined) writeLocal(STORAGE_KEYS.savePhotos, d.savePhotos ? "1" : "0");
         if (d.quizCount) writeLocal(STORAGE_KEYS.quizCount, String(d.quizCount));
+        if (d.quizLevel) writeLocal(STORAGE_KEYS.quizLevel, d.quizLevel);
         if (Array.isArray(d.plans)) writeLocal(STORAGE_KEYS.plans, JSON.stringify(d.plans));
         // アカウントにまだ答えがなければ、この端末の答えを残す（次の保存でアカウントへ）
         if (d.profile) {
@@ -1125,6 +1130,7 @@
       profile: getProfile(),
       savePhotos: savePhotosEnabled(),
       quizCount: getQuizCount(),
+      quizLevel: getQuizLevel(),
       plans: getPlans(),
       updatedAt: serverTimestamp(),
     };
@@ -2257,6 +2263,7 @@
       sub.className = "text-xs text-slate-500";
       const parts = [];
       if (log.mode === "quiz") parts.push("📝 問題だけ");
+      if (log.kind === "similar") parts.push("✏️ 類題");
       if (log.detox) parts.push(`📵 触った${log.detox.touches}回`);
       if (log.book) parts.push(`📚 ${log.book}`);
       if (log.minutes) parts.push(`⏱ ${formatMinutes(log.minutes)}`);
@@ -2469,6 +2476,53 @@
     return Number.isInteger(n) && n >= MIN_QUIZ_COUNT && n <= MAX_QUIZ_COUNT ? n : DEFAULT_QUIZ_COUNT;
   }
 
+  /* ---------- 問題のレベル ----------
+   * check：写真から拾う確認問題 / understand：なぜ・どういう意味かを問う / apply：考え方を使う新しい問題 */
+  const QUIZ_LEVELS = {
+    check: {
+      hint: "写真に書いてあることを確かめる、やさしい問題",
+      rules: `- 写真に書かれていることから答えが導ける問題にする（写真にない知識は問わない）
+- 難易度は「さっと読めば解ける」程度のやさしめにする`,
+    },
+    understand: {
+      hint: "「なぜ？」「どういう意味？」を聞く、理解を確かめる問題",
+      rules: `- 写真の文をそのまま穴埋めにした問題は作らない。「なぜそうなるか」「どういう意味か」「言いかえるとどうなるか」「どれが当てはまるか」を問う
+- 答えの根拠は写真の内容にあること。ただし写真の文を丸写しせず、選択肢は自分の言葉で言いかえる
+- 難易度は標準的にする`,
+    },
+    apply: {
+      hint: "写真の考え方を使って解く、新しい問題（数字や例文を変える）",
+      rules: `- 写真に書かれた考え方・公式・文法・知識を使って解く「新しい問題」を作る。数字・例文・場面は写真と変える
+- 写真を見ても答えがそのまま書いていない問題にする（丸写しの問題は作らない）
+- 計算や文法の問題は、答えが1つに決まるよう必ず自分で確かめる
+- 難易度は標準〜やや応用にする`,
+    },
+  };
+
+  function getQuizLevel() {
+    const v = storage.get(STORAGE_KEYS.quizLevel, "");
+    return QUIZ_LEVELS[v] ? v : "understand";
+  }
+
+  function renderQuizLevel() {
+    const level = getQuizLevel();
+    document.querySelectorAll(".level-chips [data-level]").forEach((b) =>
+      b.classList.toggle("selected", b.dataset.level === level)
+    );
+    document.querySelectorAll(".level-hint").forEach((p) => (p.textContent = QUIZ_LEVELS[level].hint));
+  }
+
+  function initQuizLevel() {
+    document.querySelectorAll(".level-chips [data-level]").forEach((b) =>
+      b.addEventListener("click", () => {
+        storage.set(STORAGE_KEYS.quizLevel, b.dataset.level);
+        track("quiz_level", { level: b.dataset.level });
+        renderQuizLevel();
+      })
+    );
+    renderQuizLevel();
+  }
+
   function renderQuizCount() {
     const n = getQuizCount();
     el.quizCountRange.value = String(n);
@@ -2492,6 +2546,7 @@
       renderQuizCount();
     });
     renderQuizCount();
+    initQuizLevel();
   }
 
   function isImageFile(file) {
@@ -2581,23 +2636,25 @@
   }
 
   // 「写真を送信して問題生成」ボタンの処理
-  async function onGenerateQuiz() {
+  // AIを使える状態か。使えなければ理由を返す
+  function aiNotReadyReason() {
     // Firebase 経由（利用者はログインだけでOK）か、自分のAPIキーで直接呼ぶかを決める
     const useFirebase = canUseFirebaseAI();
-    const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
+    if (useFirebase && !cloud.user) return "問題を作るには、ホームか設定タブの「ログイン」からログインしてください。";
+    if (useFirebase && !cloud.ai) return "AIの準備ができていません。ページを再読み込みしてください。";
+    if (!useFirebase && !storage.get(STORAGE_KEYS.apiKey, "")) return "Gemini APIキーが未設定です。設定タブの「AIの設定」から入力してください。";
+    return "";
+  }
 
-    if (useFirebase && !cloud.user) {
-      showError("問題を作るには、ホームか設定タブの「ログイン」からログインしてください。");
+  async function onGenerateQuiz() {
+    const useFirebase = canUseFirebaseAI();
+    const apiKey = storage.get(STORAGE_KEYS.apiKey, "");
+    const notReady = aiNotReadyReason();
+    if (notReady) {
+      showError(notReady);
       return;
     }
-    if (useFirebase && !cloud.ai) {
-      showError("AIの準備ができていません。ページを再読み込みしてください。");
-      return;
-    }
-    if (!useFirebase && !apiKey) {
-      showError("Gemini APIキーが未設定です。設定タブの「AIの設定」から入力してください。");
-      return;
-    }
+    state.similarMode = false;
     if (state.photos.length === 0) {
       showError("先に写真を選択してください。");
       return;
@@ -2606,7 +2663,7 @@
     setLoading(true);
     hideError();
     const startedAt = Date.now();
-    track("quiz_generate_start", { photos: state.photos.length, count: getQuizCount(), report: state.reportLogTs ? 1 : 0 });
+    track("quiz_generate_start", { photos: state.photos.length, count: getQuizCount(), level: getQuizLevel(), report: state.reportLogTs ? 1 : 0 });
     try {
       setPhase("写真の準備");
       const size = state.photos.length > 1 ? MAX_IMAGE_SIZE_MULTI : MAX_IMAGE_SIZE;
@@ -2794,12 +2851,11 @@
 添付の写真（1枚または複数枚）は、ユーザーが今勉強している教科書・ノート・参考書などのページです。
 写真が複数ある場合は、すべての写真の内容からバランスよく出題してください。
 
-写真に写っている内容「だけ」に基づいて、理解を確認するための4択の確認テストを{{COUNT}}問作成してください。
+写真に写っている内容をもとに、4択のテストを{{COUNT}}問作成してください。
 
 ルール:
 - 問題・選択肢・解説はすべて日本語で書く（写真が英語教材などの場合、英単語・英文はそのまま使ってよい）
-- 写真に書かれていることから答えが導ける問題にする（写真にない知識は問わない）
-- 難易度は「さっと読めば解ける」程度のやさしめにする
+{{LEVEL_RULES}}
 - 選択肢は必ず4つ。正解は1つだけ。紛らわしすぎる選択肢は避ける
 - answerIndex は正解の選択肢の位置（0〜3）
 - explanation は1〜2文で簡潔に
@@ -2807,8 +2863,28 @@
 - 写真が不鮮明、または学習内容が読み取れない場合は、写っている物から推測できる一般的な学習内容で問題を作り、topic に「（推測）」と付ける`;
 
   // 教材が選ばれていれば、問題作りの参考としてAIに伝える
-  function buildQuizPrompt(count = getQuizCount()) {
-    const prompt = QUIZ_PROMPT.replace("{{COUNT}}", String(count));
+  // 類題を作るときの指示（もとの問題は文字で渡す。写真は送らない）
+  const SIMILAR_PROMPT = `あなたは学習をサポートする優しい家庭教師です。
+下の「もとの問題」は、ユーザーが解いた4択問題です（間違えたものを含みます）。
+これらの類題を、合計{{COUNT}}問の4択テストにしてください。
+
+類題とは：もとの問題と同じ考え方・知識・解き方を使うが、数字・例文・場面・聞き方を変えた新しい問題のこと。
+
+ルール:
+- もとの問題と同じ問題文・同じ答えにはしない（数字や単語を1つ変えただけの問題も避ける）
+- 問題・選択肢・解説はすべて日本語で書く（英語の教材なら、英単語・英文はそのまま使ってよい）
+- もとの問題が複数あるときは、まんべんなく類題を作る
+- 選択肢は必ず4つ。正解は1つだけ
+- answerIndex は正解の選択肢の位置（0〜3）
+- explanation は1〜2文で、解き方が分かるように書く
+- 計算や文法の問題は、答えが1つに決まるよう必ず自分で確かめる
+- topic は、もとの問題のテーマを短く
+
+もとの問題:
+{{SOURCES}}`;
+
+  // アンケートの答え・教材から、AIへの参考情報を作る
+  function profileNotes() {
     const notes = [];
     if (state.studyBook) {
       notes.push(`ユーザーが勉強している教材は「${state.studyBook}」です。写真の内容を優先し、教材名はテーマの推測に使ってください。`);
@@ -2820,25 +2896,42 @@
     if (purposes?.length) notes.push(`勉強の目的は「${purposes.join("、")}」です。`);
     const left = daysUntil(examDate);
     if (left !== null && left <= 60) notes.push(`目標の試験まであと${left}日です。本番を意識した問題にしてください。`);
+    return notes;
+  }
+
+  function withNotes(prompt, notes) {
+    return notes.length ? `${prompt}\n\n参考：\n- ${notes.join("\n- ")}` : prompt;
+  }
+
+  function buildQuizPrompt(count = getQuizCount()) {
+    const prompt = QUIZ_PROMPT.replace("{{COUNT}}", String(count)).replace("{{LEVEL_RULES}}", QUIZ_LEVELS[getQuizLevel()].rules);
+    const notes = profileNotes();
     // 同じ写真で作り直すときは、前に出した問題と違う問題にする
     if (state.avoidQuestions.length) {
       notes.push(`この写真からは、すでに次の問題を出しています。これらとは違う内容・聞き方の問題を作ってください：${state.avoidQuestions.slice(-30).map((q) => `「${q}」`).join("、")}`);
     }
-    return notes.length ? `${prompt}\n\n参考：\n- ${notes.join("\n- ")}` : prompt;
+    return withNotes(prompt, notes);
+  }
+
+  function buildSimilarPrompt(sources, count) {
+    const list = sources
+      .map((q, i) => `${i + 1}. 問題：${q.question}\n   正解：${q.choices[q.answerIndex]}${q.explanation ? `\n   解説：${q.explanation}` : ""}`)
+      .join("\n");
+    return withNotes(SIMILAR_PROMPT.replace("{{COUNT}}", String(count)).replace("{{SOURCES}}", list), profileNotes());
   }
 
   /**
    * 画像を Gemini に送って、count 問のクイズを生成する
    * @returns {Promise<{topic:string, questions:Array}>}
    */
-  async function generateQuizWithGemini({ apiKey, model, images, count }) {
+  async function generateQuizWithGemini({ apiKey, model, images, count, prompt }) {
     const body = {
       contents: [
         {
           role: "user",
           parts: [
             ...images.map(({ base64, mimeType }) => ({ inline_data: { mime_type: mimeType, data: base64 } })),
-            { text: buildQuizPrompt(count) },
+            { text: prompt || buildQuizPrompt(count) },
           ],
         },
       ],
@@ -2916,7 +3009,7 @@
    * APIキーは Firebase プロジェクト側で管理されるため、利用者の設定は不要。
    * モデルはサービス側で決める（DEFAULT_MODEL）。
    */
-  async function generateQuizWithFirebase({ images, count }) {
+  async function generateQuizWithFirebase({ images, count, prompt }) {
     const { getGenerativeModel, Schema, ThinkingLevel } = cloud.aiMod;
 
     // quizResponseSchema() と同じ形を、Firebase SDK の Schema で表したもの
@@ -2968,7 +3061,7 @@
       });
       try {
         const result = await model.generateContent(
-          [buildQuizPrompt(count), ...images.map(({ base64, mimeType }) => ({ inlineData: { mimeType, data: base64 } }))],
+          [prompt || buildQuizPrompt(count), ...images.map(({ base64, mimeType }) => ({ inlineData: { mimeType, data: base64 } }))],
           { timeout: aiTimeoutMs(count) }
         );
         const text = result.response.text();
@@ -3075,6 +3168,12 @@
     el.quizBar.style.width = `${(state.currentIndex / total) * 100}%`;
     el.quizTopic.textContent = topic ? `テーマ：${topic}` : "";
     el.quizQuestion.textContent = q.question;
+    if (q.similar) {
+      const tag = document.createElement("span");
+      tag.className = "similar-tag";
+      tag.textContent = "✏️ 類題";
+      el.quizQuestion.prepend(tag);
+    }
     el.quizFeedback.classList.add("hidden");
     el.nextQuestionBtn.classList.add("hidden");
 
@@ -3107,6 +3206,7 @@
     const q = state.quiz.questions[state.currentIndex];
     const isCorrect = selected === q.answerIndex;
     if (isCorrect) state.correctCount++;
+    q.wrong = !isCorrect;
 
     // 全選択肢を無効化し、正解・不正解を色で表示
     [...el.quizChoices.children].forEach((btn, i) => {
@@ -3130,6 +3230,15 @@
       exp.textContent = q.explanation;
       el.quizFeedback.append(exp);
     }
+    // 間違えたら、その場で類題を1問足せる（次の問題として出す）
+    if (!isCorrect) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-similar similar-inline";
+      btn.textContent = "✏️ この問題の類題を次に出す";
+      btn.addEventListener("click", () => addInlineSimilar(q, btn));
+      el.quizFeedback.append(btn);
+    }
 
     el.quizScore.textContent = `正解 ${state.correctCount}`;
     const isLast = state.currentIndex === state.quiz.questions.length - 1;
@@ -3137,7 +3246,106 @@
     el.nextQuestionBtn.classList.remove("hidden");
   }
 
+  /* ---------- 類題 ----------
+   * もとの問題の文字だけをAIに渡し、同じ考え方で数字や場面を変えた問題を作る（写真は送らない） */
+  async function generateSimilarQuiz(sources, count) {
+    if (canUseFirebaseAI()) return generateQuizWithFirebase({ images: [], count, prompt: buildSimilarPrompt(sources, count) });
+    return generateQuizWithGemini({
+      apiKey: storage.get(STORAGE_KEYS.apiKey, ""),
+      model: getModel(),
+      images: [],
+      count,
+      prompt: buildSimilarPrompt(sources, count),
+    });
+  }
+
+  // 解いている途中：間違えた問題の類題を1問作り、次の問題として差し込む
+  async function addInlineSimilar(q, btn) {
+    const notReady = aiNotReadyReason();
+    if (notReady) {
+      btn.textContent = notReady;
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "類題を作成中…";
+    const index = state.currentIndex;
+    const quiz = state.quiz;
+    track("quiz_similar_start", { from: "inline", sources: 1 });
+    try {
+      const made = await generateSimilarQuiz([q], 1);
+      if (state.quiz !== quiz) return; // 作っている間に別のテストへ移った
+      const added = made.questions.map((x) => ({ ...shuffleChoices(x), similar: true }));
+      quiz.questions.splice(index + 1, 0, ...added);
+      btn.textContent = "✅ 次の問題に類題を入れました";
+      track("quiz_similar_success", { from: "inline" });
+      if (state.currentIndex === index) {
+        el.quizProgress.textContent = `Q${index + 1} / ${quiz.questions.length}`;
+        el.nextQuestionBtn.textContent = "次の問題（類題）へ";
+      }
+    } catch (err) {
+      console.error(err);
+      track("quiz_similar_error", { from: "inline", reason: generationErrorReason(err) });
+      btn.disabled = false;
+      btn.textContent = "作れませんでした。もう一度試す";
+    }
+  }
+
+  // 結果画面のボタン：間違えた問題があればその類題、全問正解なら全部の類題
+  function similarSources() {
+    const qs = state.quiz?.questions || [];
+    const wrong = qs.filter((q) => q.wrong);
+    return wrong.length ? wrong : qs;
+  }
+
+  function renderSimilarBtn() {
+    const qs = state.quiz?.questions || [];
+    const wrong = qs.filter((q) => q.wrong).length;
+    el.similarBtn.classList.toggle("hidden", !qs.length);
+    el.similarBtn.disabled = false;
+    el.similarBtn.textContent = wrong ? `✏️ 間違えた問題の類題を解く（${wrong}問から）` : "✏️ 類題で力だめし";
+    el.similarError.classList.add("hidden");
+  }
+
+  async function onSimilarRound() {
+    const notReady = aiNotReadyReason();
+    if (notReady) {
+      el.similarError.textContent = notReady;
+      el.similarError.classList.remove("hidden");
+      return;
+    }
+    const sources = similarSources();
+    if (!sources.length) return;
+    const count = getQuizCount();
+    el.similarError.classList.add("hidden");
+    el.similarBtn.disabled = true;
+    const startedAt = Date.now();
+    const tick = setInterval(() => {
+      el.similarBtn.textContent = `類題を作成中…（${Math.floor((Date.now() - startedAt) / 1000)}秒）`;
+    }, 1000);
+    el.similarBtn.textContent = "類題を作成中…（0秒）";
+    track("quiz_similar_start", { from: "done", sources: sources.length, count });
+    try {
+      const quiz = await generateSimilarQuiz(sources, count);
+      track("quiz_similar_success", { from: "done", seconds: Math.round((Date.now() - startedAt) / 1000) });
+      state.similarMode = true;
+      state.reportLogTs = null;
+      el.quizTiming.textContent = `類題の作成時間: ${((Date.now() - startedAt) / 1000).toFixed(1)}秒`;
+      startQuiz({ ...quiz, questions: quiz.questions.map((x) => ({ ...x, similar: true })) });
+    } catch (err) {
+      console.error(err);
+      track("quiz_similar_error", { from: "done", reason: generationErrorReason(err) });
+      el.similarError.textContent = err.message || "類題の作成に失敗しました。";
+      el.similarError.classList.remove("hidden");
+      el.similarBtn.disabled = false;
+      el.similarBtn.textContent = "✏️ もう一度、類題を作る";
+    } finally {
+      clearInterval(tick);
+    }
+  }
+
   function initQuiz() {
+    el.similarBtn.addEventListener("click", onSimilarRound);
     el.nextQuestionBtn.addEventListener("click", () => {
       if (state.currentIndex < state.quiz.questions.length - 1) {
         state.currentIndex++;
@@ -3270,7 +3478,13 @@
   function finishQuiz() {
     const total = state.quiz.questions.length;
     const c = state.correctCount;
-    track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0 });
+    track("quiz_complete", { correct: c, total, report: state.reportLogTs ? 1 : 0, similar: state.similarMode ? 1 : 0 });
+    if (state.similarMode) {
+      // 類題は写真がないので、証拠写真は保存しない
+      completeSession({ log: { topic: `類題：${state.quiz.topic || ""}`, correct: c, total, kind: "similar" } });
+      showScoreMessage(c, total);
+      return;
+    }
     saveEvidencePhotos({
       logTs: state.reportLogTs || null,
       book: state.studyBook || "",
@@ -3320,6 +3534,7 @@
     // 写真 → テストだけの流れなら、すぐ次の問題へ進めるボタンを出す
     el.quickAgainBtn.classList.toggle("hidden", !state.quickMode);
     el.sameAgainBtn.classList.toggle("hidden", !(state.quickMode && state.photos.length && state.quiz));
+    renderSimilarBtn();
     el.restartBtn.classList.toggle("btn-primary", !state.quickMode);
     el.restartBtn.classList.toggle("btn-ghost", state.quickMode);
     el.restartBtn.textContent = state.quizMode ? "🏠 問題モードのホーム" : "ホームに戻る";
@@ -3546,6 +3761,7 @@
   function resetAll() {
     clearPhotos();
     state.quiz = null;
+    state.similarMode = false;
     state.reportLogTs = null;
     setQuickMode(false);
     el.skipPhotoBtn.classList.remove("hidden");
